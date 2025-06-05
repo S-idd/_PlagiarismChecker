@@ -59,16 +59,21 @@ public class CodeFileController {
 		}
 	}
 
-	@GetMapping("/compare-all/{fileId}")
-	public ResponseEntity<Page<SimilarityResult>> compareAgainstAll(@PathVariable Long fileId,
-			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size) {
-		Pageable pageable = PageRequest.of(page, size);
-		Page<SimilarityResult> results = codeFileService.compareAgainstAll(fileId, pageable);
-		return ResponseEntity.ok(results);
-	}
+	   @GetMapping("/compare-all/{fileId}")
+	    public ResponseEntity<Page<SimilarityResult>> compareAgainstAll(
+	            @PathVariable Long fileId,
+	            @RequestParam(defaultValue = "0") int page,
+	            @RequestParam(defaultValue = "10") int size,
+	            @RequestParam(required = false) String languageFilter,
+	            @RequestParam(required = false) Double minSimilarity) {
+	        Pageable pageable = PageRequest.of(page, size);
+	        Page<SimilarityResult> results = codeFileService.compareAgainstAll(fileId, pageable, languageFilter, minSimilarity);
+	        return ResponseEntity.ok(results);
+	    }
+
 	@GetMapping("/files")
 	public ResponseEntity<List<CodeFile>> getAllFiles() {
-	    List<CodeFile> files = codeFileService.GetAllFiles();
-	    return ResponseEntity.ok(files);
+		List<CodeFile> files = codeFileService.GetAllFiles();
+		return ResponseEntity.ok(files);
 	}
 }

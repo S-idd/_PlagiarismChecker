@@ -205,52 +205,71 @@ public class CodeFileService {
 		return normalizedContent;
 	}
 
-	// Compare a file against all other files in the database with pagination
-	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable) {
-		logger.info("Comparing file ID {} against all other files with pagination", fileId);
-		CodeFile targetFile = codeFileRepository.findById(fileId)
-				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
-		Map<String, Integer> targetVectorString = targetFile.Gettrigram_vector();
-		if (targetVectorString == null) {
-			throw new IllegalStateException("Trigram vector not found for file: " + fileId);
-		}
+	// Compare a file against all other files in the database with pagination and filters
+    // Compare a file against all other files in the database with pagination and filters
+    public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter, Double minSimilarity) {
+        logger.info("Comparing file ID {} against all other files with pagination, languageFilter: {}, minSimilarity: {}", fileId, languageFilter, minSimilarity);
+        CodeFile targetFile = codeFileRepository.findById(fileId)
+                .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
-		// Convert target vector to Map<CharSequence, Integer>
-		Map<CharSequence, Integer> targetVector = new HashMap<>();
-		targetVectorString.forEach((key, value) -> targetVector.put(key, value));
+        Map<String, Integer> targetVectorString = targetFile.Gettrigram_vector();
+        if (targetVectorString == null) {
+            throw new IllegalStateException("Trigram vector not found for file: " + fileId);
+        }
 
-		// Fetch files with pagination
-		Page<CodeFile> allFiles = codeFileRepository.findAll(pageable);
-		CosineSimilarity cosineSimilarity = new CosineSimilarity();
+        // Normalize and validate languageFilter
+        String normalizedLanguageFilter = languageFilter;
+        if (languageFilter != null && !languageFilter.isEmpty()) {
+            String langUpper = languageFilter.toUpperCase();
+            if (!SUPPORTED_LANGUAGES.containsKey(langUpper)) {
+                throw new IllegalArgumentException("Unsupported language: " + languageFilter + ". Supported languages: " + SUPPORTED_LANGUAGES.keySet());
+            }
+            normalizedLanguageFilter = langUpper; // Use this normalized value in the filter
+        }
 
-		List<SimilarityResult> results = allFiles.getContent().stream().filter(file -> !file.getId().equals(fileId)) // Exclude
-																														// the
-																														// target
-																														// file
-																														// itself
-				.map(file -> {
-					Map<String, Integer> otherVectorString = file.Gettrigram_vector();
-					if (otherVectorString == null) {
-						logger.warn("Trigram vector not found for file ID {}", file.getId());
-						return null;
-					}
+        // Validate minSimilarity
+        if (minSimilarity != null) {
+            if (minSimilarity < 0 || minSimilarity > 100) {
+                throw new IllegalArgumentException("Minimum similarity must be between 0 and 100, got: " + minSimilarity);
+            }
+        }
 
-					// Convert other vector to Map<CharSequence, Integer>
-					Map<CharSequence, Integer> otherVector = new HashMap<>();
-					otherVectorString.forEach((key, value) -> otherVector.put(key, value));
+        // Convert target vector to Map<CharSequence, Integer>
+        Map<CharSequence, Integer> targetVector = new HashMap<>();
+        targetVectorString.forEach((key, value) -> targetVector.put(key, value));
 
-					double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
-					double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
-					logger.info("Similarity between files {} and {}: {}%", fileId, file.getId(), roundedSimilarity);
+        // Fetch files with pagination
+        Page<CodeFile> allFiles = codeFileRepository.findAll(pageable);
+        CosineSimilarity cosineSimilarity = new CosineSimilarity();
 
-					return new SimilarityResult(file.getId(), file.getFileName(),
-							file.getLanguage(), roundedSimilarity);
-				}).filter(result -> result != null)
-				.sorted((r1, r2) -> Double.compare(r2.getSimilarity(), r1.getSimilarity())) // Sort by similarity
-																							// descending
-				.collect(Collectors.toList());
+        // Use the normalized language filter in the stream
+        final String finalLanguageFilter = normalizedLanguageFilter; // Ensure it's effectively final
+        List<SimilarityResult> results = allFiles.getContent().stream()
+                .filter(file -> !file.getId().equals(fileId)) // Exclude the target file itself
+                .filter(file -> finalLanguageFilter == null || file.getLanguage().equalsIgnoreCase(finalLanguageFilter)) // Apply language filter
+                .map(file -> {
+                    Map<String, Integer> otherVectorString = file.Gettrigram_vector();
+                    if (otherVectorString == null) {
+                        logger.warn("Trigram vector not found for file ID {}", file.getId());
+                        return null;
+                    }
 
-		return new PageImpl<>(results, pageable, allFiles.getTotalElements());
-	}
+                    // Convert other vector to Map<CharSequence, Integer>
+                    Map<CharSequence, Integer> otherVector = new HashMap<>();
+                    otherVectorString.forEach((key, value) -> otherVector.put(key, value));
+
+                    double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
+                    double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
+                    logger.info("Similarity between files {} and {}: {}%", fileId, file.getId(), roundedSimilarity);
+
+                    return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), roundedSimilarity);
+                })
+                .filter(result -> result != null)
+                .filter(result -> minSimilarity == null || result.getSimilarity() >= minSimilarity) // Apply similarity threshold
+                .sorted((r1, r2) -> Double.compare(r2.getSimilarity(), r1.getSimilarity())) // Sort by similarity descending
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(results, pageable, allFiles.getTotalElements());
+    }
 }
