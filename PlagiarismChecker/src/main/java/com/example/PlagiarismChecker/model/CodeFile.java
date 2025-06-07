@@ -3,14 +3,12 @@ package com.example.PlagiarismChecker.model;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcType;
+
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-import org.hibernate.type.descriptor.java.spi.JsonJavaType;
-import org.hibernate.type.descriptor.jdbc.JsonJdbcType;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
-//import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
+
+
 
 import java.time.LocalDateTime;
 import java.util.Map;

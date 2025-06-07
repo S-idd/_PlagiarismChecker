@@ -22,6 +22,7 @@ import com.example.PlagiarismChecker.Service.CodeFileService;
 import com.example.PlagiarismChecker.model.CodeFile;
 
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.constraints.PositiveOrZero;
 
 @RestController
 @RequestMapping("/api/code-files")
@@ -65,7 +66,7 @@ public class CodeFileController {
 	            @RequestParam(defaultValue = "0") int page,
 	            @RequestParam(defaultValue = "10") int size,
 	            @RequestParam(required = false) String languageFilter,
-	            @RequestParam(required = false) Double minSimilarity) {
+	            @RequestParam(required = false) @PositiveOrZero Double minSimilarity) {
 	        Pageable pageable = PageRequest.of(page, size);
 	        Page<SimilarityResult> results = codeFileService.compareAgainstAll(fileId, pageable, languageFilter, minSimilarity);
 	        return ResponseEntity.ok(results);

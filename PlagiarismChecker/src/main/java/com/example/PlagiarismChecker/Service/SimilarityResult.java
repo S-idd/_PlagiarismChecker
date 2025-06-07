@@ -32,4 +32,16 @@ public class SimilarityResult {
     public void setLanguage(String Language) {
     	this.Language=Language;
     }
+   
+    public void setfileId(Long fileId) {
+    	this.fileId=fileId;
+    }
+    
+    public void setfileName(String fileName) {
+    	this.fileName=fileName;
+    }
+    
+    public void setSimilarity(double similarity) {
+    	this.similarity=similarity;
+    }
 }

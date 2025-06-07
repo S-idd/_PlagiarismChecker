@@ -250,47 +250,45 @@ public class CodeFileService {
             logger.warn("Empty content provided for language: {}", language);
             return "";
         }
-        content = content.replaceAll("\\s+", " ").toLowerCase();
 
-        // Remove comments based on language
+        // Remove comments first to avoid interference with other transformations
         switch (language.toUpperCase()) {
-        case "PYTHON":
-        case "RUBY":
-            content = content.replaceAll("#.*?(?=\\s|$)", "");
-            break;
-        case "CPP":
-        case "JAVA":
-        case "JAVASCRIPT":
-        case "TYPESCRIPT":
-        case "GO":
-            content = content.replaceAll("//.*?(?=\\s|$)", "")
-                    .replaceAll("/\\*.*?\\*/", "");
-            break;
-        case "ADA":
-            content = content.replaceAll("--.*?(?=\\s|$)", "");
-            break;
+            case "PYTHON":
+            case "RUBY":
+                content = content.replaceAll("#.*?(?:\\n|$)", "");
+                break;
+            case "CPP":
+            case "JAVA":
+            case "JAVASCRIPT":
+            case "TYPESCRIPT":
+            case "GO":
+                content = content.replaceAll("//.*?(?:\\n|$)", "") // Non-capturing group for newline or end
+                        .replaceAll("/\\*.*?\\*/", "");
+                break;
+            case "ADA":
+                content = content.replaceAll("--.*?(?:\\n|$)", "");
+                break;
         }
 
-        // Remove language-specific syntax and keywords
+        // Normalize whitespace and case
+        content = content.replaceAll("\\s+", " ").toLowerCase();
+
+        // Remove punctuation, keywords, and other noise
         content = content.replaceAll("[{}();\\[\\]]", " ")
                  .replaceAll("\\b(public|private|protected|static|final|abstract|class|def|function|void|int|float|double|str|string|bool|boolean|if|else|for|while|do|return|break|continue|try|catch|throw|new|self|this|super|package|import|include|using|namespace|struct|type)\\b", " ")
                  .replaceAll("\\b(true|false|null|none|nil)\\b", " ")
                  .replaceAll("=", " ")
                  .replaceAll("[+\\-*/%><!&|]", " ")
-                 .replaceAll("\\b(print|println|cout|printf|puts|put|write|log|console)\\b", " "); // Normalize output functions
+                 .replaceAll("\\b(print|println|cout|printf|puts|put|write|log|console)\\b", " ");
 
-        // Normalize identifiers (camelCase to snake_case)
+        // Handle camelCase and clean up
         content = content.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
-
-        // Remove numbers and special characters, keep only words
         content = content.replaceAll("[0-9]", " ").replaceAll("[^a-z_\\s]", " ");
-
         content = content.replaceAll("\\s+", " ");
         String normalizedContent = content.trim();
         logger.info("Normalized content for language {}: {}", language, normalizedContent);
         return normalizedContent;
     }
-
     // Delete all files from the database (for testing purposes)
     public void deleteAllFiles() {
         logger.info("Deleting all files from the database...");
