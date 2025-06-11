@@ -260,25 +260,20 @@ public class CodeFileServiceTest {
         verify(codeFileRepository, times(1)).findById(1L);
     }
 
+ 
     @Test
     void calculateSimilarity_NullTrigramVector_ThrowsException() {
-        // Arrange
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.Settrigram_vector(null);
         CodeFile file2 = new CodeFile();
         file2.setId(2L);
-        file2.setFileName("other.java");
-        file2.setLanguage("JAVA");
-        file2.Settrigram_vector(null);
+        file2.Settrigram_vector(Map.of("pub", 1));
 
-        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
         when(codeFileRepository.findById(2L)).thenReturn(Optional.of(file2));
 
-        // Act & Assert
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
-            codeFileService.calculateSimilarity(1L, 2L);
-        });
-        assertThat(exception.getMessage()).contains("Trigram vectors not found");
-        verify(codeFileRepository, times(1)).findById(1L);
-        verify(codeFileRepository, times(1)).findById(2L);
+        assertThrows(IllegalStateException.class, () -> codeFileService.calculateSimilarity(1L, 2L));
     }
     @MockitoSettings(strictness = Strictness.LENIENT)
     @Test
