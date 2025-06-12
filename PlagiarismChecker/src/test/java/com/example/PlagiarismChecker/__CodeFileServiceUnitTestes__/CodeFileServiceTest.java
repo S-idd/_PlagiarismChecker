@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -26,7 +28,10 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -36,10 +41,10 @@ import org.mockito.quality.Strictness;
 @ExtendWith(MockitoExtension.class)
 public class CodeFileServiceTest {
 
-    @Mock
+	 @MockBean
     private CodeFileRepository codeFileRepository;
 
-    @Mock
+	 @MockBean
     private Validator validator;
 
     @InjectMocks
@@ -373,5 +378,57 @@ public class CodeFileServiceTest {
 
         // Assert
         verify(codeFileRepository, times(1)).deleteAll();
+    }
+    
+    @Test
+    void testCompareBatchFiles() {
+        // Arrange
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.setFileName("file1.java");
+        file1.setLanguage("JAVA");
+        file1.setContent("public class Test { void method() { System.out.println(\"Test\"); } }");
+
+        CodeFile file2 = new CodeFile();
+        file2.setId(2L);
+        file2.setFileName("file2.java");
+        file2.setLanguage("JAVA");
+        file2.setContent("public class Test { void method() { System.out.println(\"Test2\"); } }");
+
+        CodeFile file3 = new CodeFile();
+        file3.setId(3L);
+        file3.setFileName("file3.java");
+        file3.setLanguage("JAVA");
+        file3.setContent("public class Test { void method() { System.out.println(\"Test3\"); } }");
+
+        // Mock repository
+        Mockito.when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
+        Mockito.when(codeFileRepository.findAllByIdInAndLanguage(Arrays.asList(2L, 3L), "JAVA"))
+               .thenReturn(Arrays.asList(file2, file3));
+
+        // Act
+        List<SimilarityResult> results = codeFileService.compareBatchFiles(1L, Arrays.asList(2L, 3L), "JAVA", 0.0);
+
+        // Assert
+        assertFalse(results.isEmpty(), "Results should not be empty");
+        assertEquals(2, results.size(), "Should return two results");
+        assertTrue(results.stream().anyMatch(r -> r.getFileId().equals(2L)), "Should contain file2");
+        assertTrue(results.stream().anyMatch(r -> r.getFileId().equals(3L)), "Should contain file3");
+        assertTrue(results.get(0).getSimilarity() >= 0.0, "Similarity should be non-negative");
+    }
+
+    @Test
+    void testCompareBatchFilesNullIds() {
+        assertThrows(IllegalArgumentException.class, () -> 
+        codeFileService.compareBatchFiles(1L, null, "JAVA", 0.0), 
+            "Should throw IllegalArgumentException for null fileIds");
+    }
+
+    @Test
+    void testCompareBatchFilesNonExistentTargetFile() {
+        Mockito.when(codeFileRepository.findById(1L)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> 
+        codeFileService.compareBatchFiles(1L, Arrays.asList(2L), "JAVA", 0.0), 
+            "Should throw IllegalArgumentException for non-existent target file");
     }
 }

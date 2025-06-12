@@ -1,6 +1,8 @@
 package com.example.PlagiarismChecker.Service;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -31,12 +34,14 @@ import jakarta.annotation.PostConstruct;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotNull;
 
 @Service
 public class CodeFileService {
 
 	private static final Logger logger = LoggerFactory.getLogger(CodeFileService.class);
 
+	private static final int MAX_FILE_IDS = 100; // Limit for performance
 	@Autowired
 	private CodeFileRepository codeFileRepository;
 
@@ -422,8 +427,19 @@ public class CodeFileService {
 		return codeFiles;
 	}
 
-	public List<SimilarityResult> compareBatchFiles(Long targetFileId, List<Long> fileIds, String languageFilter,
-			Double minSimilarity) {
+	@Transactional(readOnly = true)
+	public List<SimilarityResult> compareBatchFiles(@NotNull Long targetFileId, @NotNull List<Long> fileIds,
+			String languageFilter, Double minSimilarity) {
+		// Validate inputs
+		if (fileIds == null || fileIds.isEmpty()) {
+			throw new IllegalArgumentException("fileIds must not be null or empty");
+		}
+		if (fileIds.size() > MAX_FILE_IDS) {
+			throw new IllegalArgumentException("Too many file IDs; max is " + MAX_FILE_IDS);
+		}
+		if (fileIds.contains(null)) {
+			throw new IllegalArgumentException("fileIds cannot contain null values");
+		}
 		logger.info("Batch comparing file ID {} against files: {}", targetFileId, fileIds);
 		CodeFile targetFile = codeFileRepository.findById(targetFileId)
 				.orElseThrow(() -> new IllegalArgumentException("File not found: " + targetFileId));
@@ -441,13 +457,21 @@ public class CodeFileService {
 				.collect(Collectors.toList());
 
 		CustomCosineSimilarity cosineSimilarity = new CustomCosineSimilarity();
-		return filesToCompare.stream().map(file -> {
-			Map<String, Integer> otherVector = getTrigramVector(file);
-			double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
-			double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
-			logger.info("Similarity between files {} and {} ({}): {}%", targetFileId, file.getId(), file.getLanguage(),
-					roundedSimilarity);
-			return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), roundedSimilarity);
+		return filesToCompare.stream()
+			.map(file -> {
+				try {
+                    Map<String, Integer> otherVector = getTrigramVector(file);
+                    double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
+                    double roundedSimilarity = BigDecimal.valueOf(similarity)
+                            .setScale(2, RoundingMode.HALF_UP)
+                            .doubleValue();
+                    logger.debug("Similarity between files {} and {} ({}): {}%", 
+                            targetFileId, file.getId(), file.getLanguage(), roundedSimilarity);
+                    return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), roundedSimilarity);
+                } catch (Exception e) {
+                    logger.error("Error processing file ID {}: {}", file.getId(), e.getMessage());
+                    return null;
+                }
 		}).filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
 				.sorted((r1, r2) -> Double.compare(r2.getSimilarity(), r1.getSimilarity()))
 				.collect(Collectors.toList());
