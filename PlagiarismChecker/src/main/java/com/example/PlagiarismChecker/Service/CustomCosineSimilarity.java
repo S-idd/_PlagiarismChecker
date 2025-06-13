@@ -1,8 +1,8 @@
 package com.example.PlagiarismChecker.Service;
 
 import java.util.Map;
-
 import org.springframework.stereotype.Component;
+
 @Component
 public class CustomCosineSimilarity {
 
