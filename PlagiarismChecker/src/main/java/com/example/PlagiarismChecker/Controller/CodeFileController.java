@@ -49,7 +49,6 @@ public class CodeFileController {
 	}
 
 	@GetMapping("/compare")
-
 	public ResponseEntity<?> compareFiles(@RequestParam Long fileId1, @RequestParam Long fileId2) {
 		try {
 			double similarity = codeFileService.calculateSimilarity(fileId1, fileId2);

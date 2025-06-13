@@ -1,4 +1,3 @@
-
 package com.example.PlagiarismChecker.Service;
 
 import java.io.IOException;
@@ -40,6 +39,8 @@ public class CodeFileService {
     private static final Logger logger = LoggerFactory.getLogger(CodeFileService.class);
 
     private static final int MAX_FILE_IDS = 100; // Limit for performance
+    private static final int MAX_CONTENT_LENGTH = 50_000; // Reduced for memory efficiency
+
     @Autowired
     private CodeFileRepository codeFileRepository;
     
@@ -53,7 +54,6 @@ public class CodeFileService {
         return codeFileRepository.findAll();
     }
 
-    // Supported languages and their file extensions
     private static final Map<String, String[]> SUPPORTED_LANGUAGES = new HashMap<>();
     
     static {
@@ -107,12 +107,19 @@ public class CodeFileService {
         }
 
         String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        String normalizedContent = normalizeContent(content, langUpper);
+        if (normalizedContent.isEmpty()) {
+            throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
+        }
+
         CodeFile codeFile = new CodeFile();
         codeFile.setFileName(fileName);
-        String normalizedContent = normalizeContent(content, langUpper);
         codeFile.setContent(normalizedContent);
         codeFile.setLanguage(langUpper);
         Map<String, Integer> trigrams = generateTrigrams(normalizedContent, langUpper);
+        if (trigrams.isEmpty()) {
+            throw new IllegalArgumentException("No trigrams generated for file: " + fileName);
+        }
         codeFile.Settrigram_vector(trigrams);
         logger.info("Generated trigrams for file {}: {} trigrams: {}", fileName, trigrams.size(), trigrams);
 
@@ -147,11 +154,15 @@ public class CodeFileService {
         CodeFile file2 = codeFileRepository.findById(fileId2)
                 .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId2));
 
-        if (file1.Gettrigram_vector() == null || file2.Gettrigram_vector() == null) {
-            throw new IllegalStateException("Trigram vectors not found for files: " + fileId1 + ", " + fileId2);
-        }
         Map<String, Integer> vector1 = getTrigramVector(file1);
         Map<String, Integer> vector2 = getTrigramVector(file2);
+
+        if (vector1 == null || vector1.isEmpty()) {
+            throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId1);
+        }
+        if (vector2 == null || vector2.isEmpty()) {
+            throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId2);
+        }
 
         double similarity = cosineSimilarity.cosineSimilarity(vector1, vector2) * 100;
         double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
@@ -168,8 +179,8 @@ public class CodeFileService {
                 .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
         Map<String, Integer> targetVector = getTrigramVector(targetFile);
-        if (targetVector == null) {
-            throw new IllegalStateException("Trigram vector not found for file: " + fileId);
+        if (targetVector == null || targetVector.isEmpty()) {
+            throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId);
         }
 
         String normalizedLanguageFilter = languageFilter;
@@ -196,9 +207,9 @@ public class CodeFileService {
                         file.getFileName(), file.getLanguage()))
                 .filter(file -> !Objects.equals(file.getId(), fileId)).map(file -> {
                     Map<String, Integer> otherVector = getTrigramVector(file);
-                    if (otherVector == null) {
-                        logger.error("Trigram vector not found for file ID: {}", file.getId());
-                        throw new IllegalStateException("Trigram vector missing for file: " + file.getId());
+                    if (otherVector == null || otherVector.isEmpty()) {
+                        logger.error("Trigram vector not found or empty for file ID: {}", file.getId());
+                        throw new IllegalStateException("Trigram vector missing or empty for file ID: " + file.getId());
                     }
 
                     double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
@@ -224,7 +235,7 @@ public class CodeFileService {
             logger.warn("Content too short to generate trigrams for language {}: {}", language, content);
             return trigrams;
         }
-        content = content.substring(0, Math.min(content.length(), 100_000));
+        content = content.substring(0, Math.min(content.length(), MAX_CONTENT_LENGTH));
         for (int i = 0; i < content.length() - 2; i++) {
             String trigram = content.substring(i, i + 3);
             trigrams.compute(trigram, (k, v) -> (v == null) ? 1 : v + 1);
@@ -255,6 +266,9 @@ public class CodeFileService {
         case "ADA":
             content = content.replaceAll("--.*?(?:\\n|$)", "");
             break;
+        default:
+            logger.warn("Unsupported language for normalization: {}", language);
+            break;
         }
 
         content = content.replaceAll("\\s+", " ").toLowerCase();
@@ -282,9 +296,12 @@ public class CodeFileService {
     @Cacheable(value = "trigrams", key = "#file.id")
     public Map<String, Integer> getTrigramVector(CodeFile file) {
         Map<String, Integer> trigramVector = file.Gettrigram_vector();
-        if (trigramVector == null) {
+        if (trigramVector == null || trigramVector.isEmpty()) {
             logger.info("Generating trigram vector for file ID: {}", file.getId());
             trigramVector = generateTrigrams(file.getContent(), file.getLanguage());
+            if (trigramVector.isEmpty()) {
+                logger.warn("No trigrams generated for file ID: {}", file.getId());
+            }
             file.Settrigram_vector(trigramVector);
             codeFileRepository.save(file);
         }
@@ -299,9 +316,14 @@ public class CodeFileService {
         List<CodeFile> codeFiles = new ArrayList<>();
         for (MultipartFile file : files) {
             validateFile(file, language);
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            String normalizedContent = normalizeContent(content, language);
+            if (normalizedContent.isEmpty()) {
+                throw new IllegalArgumentException("File content is empty after normalization for file: " + file.getOriginalFilename());
+            }
             CodeFile codeFile = new CodeFile();
             codeFile.setFileName(file.getOriginalFilename());
-            codeFile.setContent(new String(file.getBytes(), StandardCharsets.UTF_8));
+            codeFile.setContent(normalizedContent);
             codeFile.setLanguage(language);
             codeFile.setCreatedAt(LocalDateTime.now());
             codeFiles.add(codeFile);
@@ -327,6 +349,9 @@ public class CodeFileService {
         CodeFile targetFile = codeFileRepository.findById(targetFileId)
                 .orElseThrow(() -> new IllegalArgumentException("File not found: " + targetFileId));
         Map<String, Integer> targetVector = getTrigramVector(targetFile);
+        if (targetVector == null || targetVector.isEmpty()) {
+            throw new IllegalStateException("Trigram vector not found or empty for file ID: " + targetFileId);
+        }
 
         String normalizedLanguageFilter = languageFilter != null ? languageFilter.toUpperCase() : null;
         if (normalizedLanguageFilter != null && !SUPPORTED_LANGUAGES.containsKey(normalizedLanguageFilter)) {
@@ -343,6 +368,10 @@ public class CodeFileService {
             .map(file -> {
                 try {
                     Map<String, Integer> otherVector = getTrigramVector(file);
+                    if (otherVector == null || otherVector.isEmpty()) {
+                        logger.error("Trigram vector not found or empty for file ID: {}", file.getId());
+                        return null;
+                    }
                     double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
                     double roundedSimilarity = BigDecimal.valueOf(similarity)
                             .setScale(2, RoundingMode.HALF_UP)
@@ -351,7 +380,7 @@ public class CodeFileService {
                             targetFileId, file.getId(), file.getLanguage(), roundedSimilarity);
                     return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), roundedSimilarity);
                 } catch (Exception e) {
-                    logger.error("Error processing file ID {}: {}", file.getId(), e.getMessage());
+                    logger.error("Error processing file ID {}: {}, Cause: {}", file.getId(), e.getMessage(), e.getCause());
                     return null;
                 }
             }).filter(result -> result != null)
