@@ -1,9 +1,12 @@
 package com.example.PlagiarismChecker.__CodeFileControllerUnitTestes__;
 
+import com.example.PlagiarismChecker.Controller.CodeFileController;
 import com.example.PlagiarismChecker.Service.CodeFileService;
 import com.example.PlagiarismChecker.Service.SimilarityResult;
 import com.example.PlagiarismChecker.model.CodeFile;
-import com.fasterxml.jackson.databind.ObjectMapper;
+/**
+ * import com.fasterxml.jackson.databind.ObjectMapper;
+ * **/
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -262,4 +265,49 @@ public class CodeFileControllerTestes {
 
 		verify(codeFileService, times(1)).GetAllFiles();
 	}
+	
+	@Test
+    void uploadBatchFiles_ValidFiles_ReturnsSuccess() throws Exception {
+        MockMultipartFile file1 = new MockMultipartFile("files", "test1.java", "text/plain",
+                "public class Test1 {}".getBytes());
+        MockMultipartFile file2 = new MockMultipartFile("files", "test2.java", "text/plain",
+                "public class Test2 {}".getBytes());
+        CodeFile savedFile1 = new CodeFile();
+        savedFile1.setId(1L);
+        savedFile1.setFileName("test1.java");
+        CodeFile savedFile2 = new CodeFile();
+        savedFile2.setId(2L);
+        savedFile2.setFileName("test2.java");
+
+        when(codeFileService.uploadBatchFiles(List.of(file1, file2), "JAVA"))
+                .thenReturn(List.of(savedFile1, savedFile2));
+
+        mockMvc.perform(multipart("/api/code-files/upload/batch")
+                        .file(file1)
+                        .file(file2)
+                        .param("language", "JAVA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[1].id").value(2));
+    }
+
+    @Test
+    void compareBatchFiles_ValidRequest_ReturnsResults() throws Exception {
+        CodeFileController.BatchCompareRequest request = new CodeFileController.BatchCompareRequest();
+        request.setTargetFileId(1L);
+        request.setFileIds(List.of(2L, 3L));
+        request.setLanguageFilter("JAVA");
+        request.setMinSimilarity(20.0);
+
+        SimilarityResult result = new SimilarityResult(2L, "test2.java", "JAVA", 95.0);
+        when(codeFileService.compareBatchFiles(1L, List.of(2L, 3L), "JAVA", 20.0))
+                .thenReturn(List.of(result));
+
+        mockMvc.perform(post("/api/code-files/compare/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetFileId\":1,\"fileIds\":[2,3],\"languageFilter\":\"JAVA\",\"minSimilarity\":20.0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].fileId").value(2))
+                .andExpect(jsonPath("$[0].similarity").value(95.0));
+    }
 }

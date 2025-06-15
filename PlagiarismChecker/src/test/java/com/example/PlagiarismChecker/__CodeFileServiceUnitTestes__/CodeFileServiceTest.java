@@ -1,16 +1,17 @@
+
 package com.example.PlagiarismChecker.__CodeFileServiceUnitTestes__;
-
-
 
 import com.example.PlagiarismChecker.model.CodeFile;
 import com.example.PlagiarismChecker.Repository.CodeFileRepository;
+import com.example.PlagiarismChecker.Service.CodeFileService;
+import com.example.PlagiarismChecker.Service.CustomCosineSimilarity;
+import com.example.PlagiarismChecker.Service.SimilarityResult;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -19,19 +20,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
-import com.example.PlagiarismChecker.Service.SimilarityResult;
-import com.example.PlagiarismChecker.Service.CodeFileService;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
-
 
 @ExtendWith(MockitoExtension.class)
 public class CodeFileServiceTest {
@@ -42,7 +37,9 @@ public class CodeFileServiceTest {
     @Mock
     private Validator validator;
 
-    @InjectMocks
+    @Mock
+    private CustomCosineSimilarity cosineSimilarity;
+
     private CodeFileService codeFileService;
 
     private CodeFile codeFile;
@@ -50,6 +47,8 @@ public class CodeFileServiceTest {
 
     @BeforeEach
     void setUp() {
+        codeFileService = new CodeFileService(codeFileRepository, validator, cosineSimilarity);
+
         codeFile = new CodeFile();
         codeFile.setId(1L);
         codeFile.setFileName("test.java");
@@ -71,14 +70,11 @@ public class CodeFileServiceTest {
 
     @Test
     void getAllFiles_Success() {
-        // Arrange
         List<CodeFile> files = Arrays.asList(codeFile);
         when(codeFileRepository.findAll()).thenReturn(files);
 
-        // Act
         List<CodeFile> result = codeFileService.GetAllFiles();
 
-        // Assert
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getFileName()).isEqualTo("test.java");
         verify(codeFileRepository, times(1)).findAll();
@@ -86,20 +82,16 @@ public class CodeFileServiceTest {
 
     @Test
     void getAllFiles_EmptyList() {
-        // Arrange
         when(codeFileRepository.findAll()).thenReturn(Arrays.asList());
 
-        // Act
         List<CodeFile> result = codeFileService.GetAllFiles();
 
-        // Assert
         assertThat(result).isEmpty();
         verify(codeFileRepository, times(1)).findAll();
     }
 
     @Test
     void migrateExistingFiles_Success() {
-        // Arrange
         CodeFile file = new CodeFile();
         file.setId(1L);
         file.setFileName("test.java");
@@ -109,10 +101,8 @@ public class CodeFileServiceTest {
         when(codeFileRepository.findAll()).thenReturn(files);
         when(codeFileRepository.save(any(CodeFile.class))).thenReturn(file);
 
-        // Act
         codeFileService.migrateExistingFiles();
 
-        // Assert
         verify(codeFileRepository, times(1)).findAll();
         verify(codeFileRepository, times(1)).save(any(CodeFile.class));
         assertThat(file.Gettrigram_vector()).isNotNull();
@@ -120,14 +110,15 @@ public class CodeFileServiceTest {
 
     @Test
     void uploadFile_Success() throws IOException {
-        // Arrange
         when(validator.validate(any(CodeFile.class))).thenReturn(Collections.emptySet());
-        when(codeFileRepository.save(any(CodeFile.class))).thenReturn(codeFile);
+        when(codeFileRepository.save(any(CodeFile.class))).thenAnswer(invocation -> {
+            CodeFile savedFile = invocation.getArgument(0);
+            savedFile.setId(1L);
+            return savedFile;
+        });
 
-        // Act
         CodeFile result = codeFileService.uploadFile(mockFile, "java");
 
-        // Assert
         assertThat(result.getFileName()).isEqualTo("test.java");
         assertThat(result.getLanguage()).isEqualTo("JAVA");
         assertThat(result.Gettrigram_vector()).isNotEmpty();
@@ -136,8 +127,39 @@ public class CodeFileServiceTest {
     }
 
     @Test
+    void uploadFile_EmptyContentAfterNormalization_ThrowsException() {
+        MockMultipartFile emptyContentFile = new MockMultipartFile(
+                "file",
+                "empty.java",
+                "text/plain",
+                "// Comment only\n".getBytes()
+        );
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            codeFileService.uploadFile(emptyContentFile, "java");
+        });
+        assertThat(exception.getMessage()).isEqualTo("File content is empty after normalization for file: empty.java");
+        verify(codeFileRepository, never()).save(any());
+    }
+
+    @Test
+    void uploadFile_NoTrigramsGenerated_ThrowsException() {
+        MockMultipartFile shortContentFile = new MockMultipartFile(
+                "file",
+                "short.java",
+                "text/plain",
+                "ab".getBytes()
+        );
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            codeFileService.uploadFile(shortContentFile, "java");
+        });
+        assertThat(exception.getMessage()).isEqualTo("No trigrams generated for file: short.java");
+        verify(codeFileRepository, never()).save(any());
+    }
+
+    @Test
     void uploadFile_NullFile_ThrowsException() {
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.uploadFile(null, "java");
         });
@@ -147,7 +169,6 @@ public class CodeFileServiceTest {
 
     @Test
     void uploadFile_InvalidExtension_ThrowsException() {
-        // Arrange
         MockMultipartFile invalidFile = new MockMultipartFile(
                 "file",
                 "test.txt",
@@ -155,7 +176,6 @@ public class CodeFileServiceTest {
                 "content".getBytes()
         );
 
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.uploadFile(invalidFile, "java");
         });
@@ -165,12 +185,10 @@ public class CodeFileServiceTest {
 
     @Test
     void uploadFile_FileSizeExceedsLimit_ThrowsException() {
-        // Arrange
         MultipartFile largeFile = mock(MultipartFile.class);
         when(largeFile.getOriginalFilename()).thenReturn("test.java");
-        when(largeFile.getSize()).thenReturn(11 * 1024 * 1024L); // 11MB
+        when(largeFile.getSize()).thenReturn(11 * 1024 * 1024L);
 
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.uploadFile(largeFile, "java");
         });
@@ -180,13 +198,11 @@ public class CodeFileServiceTest {
 
     @Test
     void uploadFile_ValidationFailure_ThrowsException() throws IOException {
-        // Arrange
         @SuppressWarnings("unchecked")
         ConstraintViolation<CodeFile> violation = mock(ConstraintViolation.class);
         when(violation.getMessage()).thenReturn("File name cannot be blank");
         when(validator.validate(any(CodeFile.class))).thenReturn(Set.of(violation));
 
-        // Act & Assert
         ConstraintViolationException exception = assertThrows(ConstraintViolationException.class, () -> {
             codeFileService.uploadFile(mockFile, "java");
         });
@@ -198,34 +214,27 @@ public class CodeFileServiceTest {
 
     @Test
     void isValidExtension_ValidExtension_ReturnsTrue() {
-        // Act
         boolean result = codeFileService.isValidExtension("test.java", "JAVA");
 
-        // Assert
         assertThat(result).isTrue();
     }
 
     @Test
     void isValidExtension_InvalidExtension_ReturnsFalse() {
-        // Act
         boolean result = codeFileService.isValidExtension("test.txt", "JAVA");
 
-        // Assert
         assertThat(result).isFalse();
     }
 
     @Test
     void isValidExtension_UnsupportedLanguage_ReturnsFalse() {
-        // Act
         boolean result = codeFileService.isValidExtension("test.java", "PHP");
 
-        // Assert
         assertThat(result).isFalse();
     }
 
     @Test
     void calculateSimilarity_Success() {
-        // Arrange
         CodeFile file2 = new CodeFile();
         file2.setId(2L);
         file2.setFileName("other.java");
@@ -237,22 +246,41 @@ public class CodeFileServiceTest {
 
         when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
         when(codeFileRepository.findById(2L)).thenReturn(Optional.of(file2));
+        when(cosineSimilarity.cosineSimilarity(any(), any())).thenReturn(0.95);
 
-        // Act
         double similarity = codeFileService.calculateSimilarity(1L, 2L);
 
-        // Assert
         assertThat(similarity).isGreaterThan(0);
         verify(codeFileRepository, times(1)).findById(1L);
         verify(codeFileRepository, times(1)).findById(2L);
     }
 
     @Test
+    void calculateSimilarity_EmptyTrigramVector_ThrowsException() {
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.setFileName("file1.java");
+        file1.setLanguage("JAVA");
+        file1.Settrigram_vector(new HashMap<>());
+        CodeFile file2 = new CodeFile();
+        file2.setId(2L);
+        file2.setFileName("file2.java");
+        file2.setLanguage("JAVA");
+        file2.Settrigram_vector(Map.of("pub", 1));
+
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
+        when(codeFileRepository.findById(2L)).thenReturn(Optional.of(file2));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            codeFileService.calculateSimilarity(1L, 2L);
+        });
+        assertThat(exception.getMessage()).isEqualTo("Trigram vector not found or empty for file ID: 1");
+    }
+
+    @Test
     void calculateSimilarity_FileNotFound_ThrowsException() {
-        // Arrange
         when(codeFileRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.calculateSimilarity(1L, 2L);
         });
@@ -262,28 +290,28 @@ public class CodeFileServiceTest {
 
     @Test
     void calculateSimilarity_NullTrigramVector_ThrowsException() {
-        // Arrange
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.setFileName("file1.java");
+        file1.setLanguage("JAVA");
+        file1.Settrigram_vector(null);
         CodeFile file2 = new CodeFile();
         file2.setId(2L);
-        file2.setFileName("other.java");
+        file2.setFileName("file2.java");
         file2.setLanguage("JAVA");
-        file2.Settrigram_vector(null);
+        file2.Settrigram_vector(Map.of("pub", 1));
 
-        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
         when(codeFileRepository.findById(2L)).thenReturn(Optional.of(file2));
 
-        // Act & Assert
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
             codeFileService.calculateSimilarity(1L, 2L);
         });
-        assertThat(exception.getMessage()).contains("Trigram vectors not found");
-        verify(codeFileRepository, times(1)).findById(1L);
-        verify(codeFileRepository, times(1)).findById(2L);
+        assertThat(exception.getMessage()).isEqualTo("Trigram vector not found or empty for file ID: 1");
     }
-    @MockitoSettings(strictness = Strictness.LENIENT)
+
     @Test
     void compareAgainstAll_Success() {
-        // Arrange
         CodeFile file2 = new CodeFile();
         file2.setId(2L);
         file2.setFileName("other.java");
@@ -295,24 +323,39 @@ public class CodeFileServiceTest {
         List<CodeFile> files = Arrays.asList(file2);
         when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
         when(codeFileRepository.findByLanguage(eq("JAVA"), any(Pageable.class))).thenReturn(new PageImpl<>(files));
+        when(cosineSimilarity.cosineSimilarity(any(), any())).thenReturn(0.95);
 
-        // Act
         Page<SimilarityResult> result = codeFileService.compareAgainstAll(1L, PageRequest.of(0, 10), "java", 0.5);
 
-        // Assert
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getFileId()).isEqualTo(2L);
         assertThat(result.getContent().get(0).getSimilarity()).isGreaterThanOrEqualTo(0.5);
         verify(codeFileRepository, times(1)).findById(1L);
+        verify(codeFileRepository, times(1)).findByLanguage(eq("JAVA"), any(Pageable.class));
+    }
+
+    @Test
+    void compareAgainstAll_EmptyTrigramVector_ThrowsException() {
+        CodeFile file2 = new CodeFile();
+        file2.setId(2L);
+        file2.setFileName("other.java");
+        file2.setLanguage("JAVA");
+        file2.Settrigram_vector(new HashMap<>());
+
+        List<CodeFile> files = Arrays.asList(file2);
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
         when(codeFileRepository.findByLanguage(eq("JAVA"), any(Pageable.class))).thenReturn(new PageImpl<>(files));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            codeFileService.compareAgainstAll(1L, PageRequest.of(0, 10), "java", 0.5);
+        });
+        assertThat(exception.getMessage()).isEqualTo("Trigram vector missing or empty for file ID: 2");
     }
 
     @Test
     void compareAgainstAll_FileNotFound_ThrowsException() {
-        // Arrange
         when(codeFileRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.compareAgainstAll(1L, PageRequest.of(0, 10), null, null);
         });
@@ -322,10 +365,8 @@ public class CodeFileServiceTest {
 
     @Test
     void compareAgainstAll_UnsupportedLanguage_ThrowsException() {
-        // Arrange
         when(codeFileRepository.findById(1L)).thenReturn(Optional.of(codeFile));
 
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             codeFileService.compareAgainstAll(1L, PageRequest.of(0, 10), "PHP", null);
         });
@@ -335,10 +376,8 @@ public class CodeFileServiceTest {
 
     @Test
     void generateTrigrams_Success() {
-        // Act
         Map<String, Integer> trigrams = codeFileService.generateTrigrams("public class Test {}", "JAVA");
 
-        // Assert
         assertThat(trigrams).isNotEmpty();
         assertThat(trigrams).containsKey("pub");
         assertThat(trigrams).containsKey("lic");
@@ -346,37 +385,159 @@ public class CodeFileServiceTest {
 
     @Test
     void generateTrigrams_ShortContent_ReturnsEmptyMap() {
-        // Act
         Map<String, Integer> trigrams = codeFileService.generateTrigrams("ab", "JAVA");
 
-        // Assert
         assertThat(trigrams).isEmpty();
     }
 
     @Test
+    void generateTrigrams_LargeContent_TruncatesCorrectly() {
+        String largeContent = "a".repeat(60_000);
+        Map<String, Integer> trigrams = codeFileService.generateTrigrams(largeContent, "JAVA");
+
+        assertThat(trigrams).isNotEmpty();
+        assertThat(trigrams.keySet().stream().allMatch(trigram -> trigram.equals("aaa"))).isTrue();
+        assertThat(trigrams.get("aaa")).isEqualTo(50_000 - 2);
+    }
+
+    @Test
     void normalizeContent_Success() {
-        // Act
         String normalized = codeFileService.normalizeContent("public class Test { // comment\n}", "JAVA");
 
-        // Assert
         assertThat(normalized).isEqualTo("test");
     }
 
     @Test
     void normalizeContent_NullContent_ReturnsEmptyString() {
-        // Act
         String normalized = codeFileService.normalizeContent(null, "JAVA");
 
-        // Assert
         assertThat(normalized).isEmpty();
     }
 
     @Test
     void deleteAllFiles_Success() {
-        // Act
         codeFileService.deleteAllFiles();
 
-        // Assert
         verify(codeFileRepository, times(1)).deleteAll();
+    }
+
+    @Test
+    void uploadBatchFiles_Success() throws IOException {
+        MockMultipartFile file1 = new MockMultipartFile("files", "file1.java", "text/plain", "public class File1 {}".getBytes());
+        MockMultipartFile file2 = new MockMultipartFile("files", "file2.java", "text/plain", "public class File2 {}".getBytes());
+        List<MultipartFile> files = Arrays.asList(file1, file2);
+
+        when(codeFileRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<CodeFile> savedFiles = invocation.getArgument(0);
+            savedFiles.get(0).setId(1L);
+            savedFiles.get(1).setId(2L);
+            return savedFiles;
+        });
+
+        List<CodeFile> result = codeFileService.uploadBatchFiles(files, "JAVA");
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getFileName()).isEqualTo("file1.java");
+        assertThat(result.get(1).getFileName()).isEqualTo("file2.java");
+        verify(codeFileRepository, times(1)).saveAll(any());
+    }
+
+    @Test
+    void uploadBatchFiles_EmptyContentAfterNormalization_ThrowsException() {
+        MockMultipartFile file1 = new MockMultipartFile("files", "file1.java", "text/plain", "// Comment only\n".getBytes());
+        List<MultipartFile> files = Arrays.asList(file1);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            codeFileService.uploadBatchFiles(files, "JAVA");
+        });
+        assertThat(exception.getMessage()).isEqualTo("File content is empty after normalization for file: file1.java");
+        verify(codeFileRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void testCompareBatchFiles() {
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.setFileName("file1.java");
+        file1.setLanguage("JAVA");
+        file1.setContent("public class Test { void method() { System.out.println(\"Test\"); } }");
+        Map<String, Integer> trigrams1 = new HashMap<>();
+        trigrams1.put("pub", 1);
+        trigrams1.put("lic", 1);
+        file1.Settrigram_vector(trigrams1);
+
+        CodeFile file2 = new CodeFile();
+        file2.setId(2L);
+        file2.setFileName("file2.java");
+        file2.setLanguage("JAVA");
+        file2.setContent("public class Test { void method() { System.out.println(\"Test2\"); } }");
+        Map<String, Integer> trigrams2 = new HashMap<>();
+        trigrams2.put("pub", 1);
+        trigrams2.put("lic", 1);
+        file2.Settrigram_vector(trigrams2);
+
+        CodeFile file3 = new CodeFile();
+        file3.setId(3L);
+        file3.setFileName("file3.java");
+        file3.setLanguage("JAVA");
+        file3.setContent("public class Test { void method() { System.out.println(\"Test3\"); } }");
+        Map<String, Integer> trigrams3 = new HashMap<>();
+        trigrams3.put("pub", 1);
+        trigrams3.put("lic", 1);
+        file3.Settrigram_vector(trigrams3);
+
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
+        when(codeFileRepository.findAllById(Arrays.asList(2L, 3L)))
+               .thenReturn(Arrays.asList(file2, file3));
+        when(cosineSimilarity.cosineSimilarity(any(), any())).thenReturn(0.95);
+
+        List<SimilarityResult> results = codeFileService.compareBatchFiles(1L, Arrays.asList(2L, 3L), "JAVA", 0.0);
+
+        System.out.println("Results: " + results);
+
+        assertFalse(results.isEmpty(), "Results should not be empty");
+        assertEquals(2, results.size(), "Should return two results");
+        assertTrue(results.stream().anyMatch(r -> r.getFileId().equals(2L)), "Should contain file2");
+        assertTrue(results.stream().anyMatch(r -> r.getFileId().equals(3L)), "Should contain file3");
+        assertTrue(results.get(0).getSimilarity() >= 0.0, "Similarity should be non-negative");
+    }
+
+    @Test
+    void testCompareBatchFiles_EmptyTrigramVector_ReturnsEmptyList() {
+        CodeFile file1 = new CodeFile();
+        file1.setId(1L);
+        file1.setFileName("file1.java");
+        file1.setLanguage("JAVA");
+        Map<String, Integer> trigrams1 = new HashMap<>();
+        trigrams1.put("pub", 1);
+        file1.Settrigram_vector(trigrams1);
+
+        CodeFile file2 = new CodeFile();
+        file2.setId(2L);
+        file2.setFileName("file2.java");
+        file2.setLanguage("JAVA");
+        file2.Settrigram_vector(new HashMap<>());
+
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.of(file1));
+        when(codeFileRepository.findAllById(Arrays.asList(2L))).thenReturn(Arrays.asList(file2));
+
+        List<SimilarityResult> results = codeFileService.compareBatchFiles(1L, Arrays.asList(2L), "JAVA", 0.0);
+
+        assertThat(results).isEmpty();
+    }
+
+    @Test
+    void testCompareBatchFilesNullIds() {
+        assertThrows(IllegalArgumentException.class, () -> 
+            codeFileService.compareBatchFiles(1L, null, "JAVA", 0.0), 
+            "Should throw IllegalArgumentException for null fileIds");
+    }
+
+    @Test
+    void testCompareBatchFilesNonExistentTargetFile() {
+        when(codeFileRepository.findById(1L)).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> 
+            codeFileService.compareBatchFiles(1L, Arrays.asList(2L), "JAVA", 0.0), 
+            "Should throw IllegalArgumentException for non-existent target file");
     }
 }

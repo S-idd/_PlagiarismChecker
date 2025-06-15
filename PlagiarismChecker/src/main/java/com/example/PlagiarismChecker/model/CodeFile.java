@@ -36,7 +36,8 @@ public class CodeFile {
 	@CreationTimestamp
 	@Column(updatable = false)
 	private LocalDateTime createdAt;
-
+	
+	
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "trigram_vector", columnDefinition = "JSONB")
 	private Map<String, Integer> trigram_vector;

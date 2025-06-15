@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,21 +61,80 @@ public class CodeFileController {
 		}
 	}
 
-	   @GetMapping("/compare-all/{fileId}")
-	    public ResponseEntity<Page<SimilarityResult>> compareAgainstAll(
-	            @PathVariable Long fileId,
-	            @RequestParam(defaultValue = "0") int page,
-	            @RequestParam(defaultValue = "10") int size,
-	            @RequestParam(required = false) String languageFilter,
-	            @RequestParam(required = false) @PositiveOrZero Double minSimilarity) {
-	        Pageable pageable = PageRequest.of(page, size);
-	        Page<SimilarityResult> results = codeFileService.compareAgainstAll(fileId, pageable, languageFilter, minSimilarity);
-	        return ResponseEntity.ok(results);
-	    }
+	@GetMapping("/compare-all/{fileId}")
+	public ResponseEntity<Page<SimilarityResult>> compareAgainstAll(@PathVariable Long fileId,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
+			@RequestParam(required = false) String languageFilter,
+			@RequestParam(required = false) @PositiveOrZero Double minSimilarity) {
+		Pageable pageable = PageRequest.of(page, size);
+		Page<SimilarityResult> results = codeFileService.compareAgainstAll(fileId, pageable, languageFilter,
+				minSimilarity);
+		return ResponseEntity.ok(results);
+	}
 
 	@GetMapping("/files")
 	public ResponseEntity<List<CodeFile>> getAllFiles() {
 		List<CodeFile> files = codeFileService.GetAllFiles();
 		return ResponseEntity.ok(files);
+	}
+
+	/**
+	 * These Method ~uploadBatchFiles ,compareBatchFiles ~ Are In Testing Phase And
+	 * Need to Be Tested Very Efficiently So These Are Pushed Into The TestingENV
+	 * Branch
+	 */
+
+	@PostMapping("/upload/batch")
+	public ResponseEntity<List<CodeFile>> uploadBatchFiles(@RequestParam("files") List<MultipartFile> files,
+			@RequestParam("language") String language) throws IOException {
+		List<CodeFile> savedFiles = codeFileService.uploadBatchFiles(files, language);
+		return ResponseEntity.ok(savedFiles);
+	}
+
+	@PostMapping("/compare/batch")
+	public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
+		List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
+				request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
+		return ResponseEntity.ok(results);
+	}
+
+	// DTO for batch comparison request
+	public static class BatchCompareRequest {
+		private Long targetFileId;
+		private List<Long> fileIds;
+		private String languageFilter;
+		private Double minSimilarity;
+
+		public Long getTargetFileId() {
+			return targetFileId;
+		}
+
+		public void setTargetFileId(Long targetFileId) {
+			this.targetFileId = targetFileId;
+		}
+
+		public List<Long> getFileIds() {
+			return fileIds;
+		}
+
+		public void setFileIds(List<Long> fileIds) {
+			this.fileIds = fileIds;
+		}
+
+		public String getLanguageFilter() {
+			return languageFilter;
+		}
+
+		public void setLanguageFilter(String languageFilter) {
+			this.languageFilter = languageFilter;
+		}
+
+		public Double getMinSimilarity() {
+			return minSimilarity;
+		}
+
+		public void setMinSimilarity(Double minSimilarity) {
+			this.minSimilarity = minSimilarity;
+		}
 	}
 }
