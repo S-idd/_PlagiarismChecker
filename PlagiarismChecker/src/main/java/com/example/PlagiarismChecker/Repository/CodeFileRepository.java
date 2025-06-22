@@ -21,4 +21,7 @@ public interface CodeFileRepository extends JpaRepository<CodeFile, Long> {
     long countByLanguageExcludingFileId(@Param("language") String language, @Param("fileId") Long fileId);
     
     List<CodeFile> findAllByIdInAndLanguage(List<Long> ids, String language);
+    
+    @Query("SELECT c FROM CodeFile c WHERE c.content LIKE %:keyword%")
+    List<CodeFile> findByContentContaining(@Param("keyword") String keyword);
 }

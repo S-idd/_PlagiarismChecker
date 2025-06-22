@@ -1,6 +1,8 @@
 package com.example.PlagiarismChecker.Service;
 
-public class SimilarityResult {
+import java.io.Serializable;
+
+public class SimilarityResult implements Serializable{
     private Long fileId;
     private String fileName;
     private String Language;
