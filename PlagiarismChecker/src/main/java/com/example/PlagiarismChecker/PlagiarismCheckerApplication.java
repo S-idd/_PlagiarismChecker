@@ -13,7 +13,7 @@ import jakarta.annotation.PostConstruct;
 
 @SpringBootApplication
 @EntityScan("com.example.PlagiarismChecker.model")
-@EnableCaching // Add this
+@EnableCaching 
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class PlagiarismCheckerApplication {
 

@@ -110,7 +110,7 @@ public class CodeFileService {
 
 //	@Cacheable(value = "all-files", key = "'all'")
 
-	@Cacheable(value = "codeFilesCache")
+//	@Cacheable(value = "codeFilesCache")
 
 	public List<CodeFile> GetAllFiles() {
 

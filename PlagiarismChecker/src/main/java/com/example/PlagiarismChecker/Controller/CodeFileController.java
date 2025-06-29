@@ -98,12 +98,12 @@ public class CodeFileController {
     }
 
 	@PostMapping("/compare/batch")
-	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
 		List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
 				request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
 		return ResponseEntity.ok(results);
 	}
+	
 
 	// DTO for batch comparison request
 	public static class BatchCompareRequest {

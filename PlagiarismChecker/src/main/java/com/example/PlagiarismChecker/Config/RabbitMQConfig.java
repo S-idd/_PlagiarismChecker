@@ -12,13 +12,13 @@ public class RabbitMQConfig {
 	
 	@Bean
 	public Queue uploadQueue() {
-	    return new Queue("uploadQueue", true); // Durable queue
+	    return new Queue("uploadQueue", true,false, false); // Durable queue
 	}
 
     @Bean
     public CachingConnectionFactory rabbitConnectionFactory() {
         CachingConnectionFactory factory = new CachingConnectionFactory();
-        factory.setHost("192.168.101.60");
+        factory.setHost("172.26.15.6");
         factory.setPort(5672);
         factory.setUsername("admin");
         factory.setPassword("root");
