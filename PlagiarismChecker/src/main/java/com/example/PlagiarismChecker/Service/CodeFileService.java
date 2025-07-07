@@ -1,7 +1,5 @@
 package com.example.PlagiarismChecker.Service;
 
-
-
 import java.io.IOException;
 
 import java.io.InputStream;
@@ -54,13 +52,9 @@ import org.springframework.data.domain.PageImpl;
 
 import org.springframework.data.domain.Pageable;
 
-
-
+import com.example.PlagiarismChecker.DTO.CodeFileSummary;
 import com.example.PlagiarismChecker.Repository.CodeFileRepository;
-
 import com.example.PlagiarismChecker.model.CodeFile;
-
-
 
 import jakarta.annotation.PostConstruct;
 
@@ -72,63 +66,53 @@ import jakarta.validation.Validator;
 
 import jakarta.validation.constraints.NotNull;
 
-
-
 @Service
 
 public class CodeFileService {
 
-
-
 	private static final Logger logger = LoggerFactory.getLogger(CodeFileService.class);
-
-
 
 	private static final int MAX_FILE_IDS = 100; // Limit for performance
 
 	private static final int MAX_CONTENT_LENGTH = 50_000; // Reduced for memory efficiency
 
-
-
 	@Autowired
 
 	private CodeFileRepository codeFileRepository;
-
-
 
 	@Autowired
 
 	private final CustomCosineSimilarity cosineSimilarity;
 
-
-
 	@Autowired
 
 	private Validator validator;
 
-
-
 //	@Cacheable(value = "all-files", key = "'all'")
+//
+//	public List<CodeFile> GetAllFiles() {
+//
+//		return codeFileRepository.findAll();
+//
+//	}
 
-//	@Cacheable(value = "codeFilesCache")
-
-	public List<CodeFile> GetAllFiles() {
-
-		return codeFileRepository.findAll();
-
+//	public Page<CodeFile> GetAllFiles(Pageable pageable) {
+//		return codeFileRepository.findAll(pageable);
+//	}
+	
+	@Cacheable(value = "all-files", key = "'all'")
+	public Page<CodeFileSummary> GetAllFilesASAP(Pageable pageable) {
+	    return codeFileRepository.findAllBy(pageable);
 	}
 
 
-
 	private static final Map<String, String[]> SUPPORTED_LANGUAGES = new HashMap<>();
-
-
 
 	static {
 
 		SUPPORTED_LANGUAGES.put("JAVA", new String[] { ".java" });
 
-		SUPPORTED_LANGUAGES.put("PYTHON", new String[] { ".py" ,"ipynb"});
+		SUPPORTED_LANGUAGES.put("PYTHON", new String[] { ".py", "ipynb" });
 
 		SUPPORTED_LANGUAGES.put("CPP", new String[] { ".cpp", ".h", ".hpp" });
 
@@ -144,8 +128,6 @@ public class CodeFileService {
 
 	}
 
-
-
 	public CodeFileService(CodeFileRepository codeFileRepository, Validator validator,
 
 			CustomCosineSimilarity cosineSimilarity) {
@@ -157,8 +139,6 @@ public class CodeFileService {
 		this.cosineSimilarity = cosineSimilarity;
 
 	}
-
-
 
 	@PostConstruct
 
@@ -190,127 +170,103 @@ public class CodeFileService {
 
 	}
 
-
-
-	
-
-	
-
 	public CodeFile uploadFileStream(InputStream inputStream, String fileName, String language) throws IOException {
 
-	    if (inputStream == null) {
+		if (inputStream == null) {
 
-	        throw new IllegalArgumentException("File input stream cannot be null");
+			throw new IllegalArgumentException("File input stream cannot be null");
 
-	    }
+		}
 
-	    String langUpper = language.toUpperCase();
+		String langUpper = language.toUpperCase();
 
+		if (fileName == null || !isValidExtension(fileName, langUpper)) {
 
+			throw new IllegalArgumentException(
 
-	    if (fileName == null || !isValidExtension(fileName, langUpper)) {
+					"Invalid file extension for language " + language + ". Supported extensions: "
 
-	        throw new IllegalArgumentException(
+							+ String.join(", ", SUPPORTED_LANGUAGES.getOrDefault(langUpper, new String[] {})));
 
-	                "Invalid file extension for language " + language + ". Supported extensions: "
+		}
 
-	                        + String.join(", ", SUPPORTED_LANGUAGES.getOrDefault(langUpper, new String[] {})));
+		// Estimate size (approximate, adjust if needed)
 
-	    }
+		long fileSize = inputStream.available();
 
+		if (fileSize > 10 * 1024 * 1024) {
 
+			throw new IllegalArgumentException("File size exceeds 10MB limit");
 
-	    // Estimate size (approximate, adjust if needed)
+		}
 
-	    long fileSize = inputStream.available();
+		// Read content in chunks
 
-	    if (fileSize > 10 * 1024 * 1024) {
+		StringBuilder contentBuilder = new StringBuilder();
 
-	        throw new IllegalArgumentException("File size exceeds 10MB limit");
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
 
-	    }
+			char[] buffer = new char[8192]; // 8KB buffer
 
+			int bytesRead;
 
+			while ((bytesRead = reader.read(buffer)) != -1) {
 
-	    // Read content in chunks
+				contentBuilder.append(buffer, 0, bytesRead);
 
-	    StringBuilder contentBuilder = new StringBuilder();
+			}
 
-	    try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+		}
 
-	        char[] buffer = new char[8192]; // 8KB buffer
+		String content = contentBuilder.toString();
 
-	        int bytesRead;
+		String normalizedContent = normalizeContent(content, langUpper);
 
-	        while ((bytesRead = reader.read(buffer)) != -1) {
+		if (normalizedContent.isEmpty()) {
 
-	            contentBuilder.append(buffer, 0, bytesRead);
+			throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
 
-	        }
+		}
 
-	    }
+		CodeFile codeFile = new CodeFile();
 
+		codeFile.setFileName(fileName);
 
+		codeFile.setContent(normalizedContent);
 
-	    String content = contentBuilder.toString();
+		codeFile.setLanguage(langUpper);
 
-	    String normalizedContent = normalizeContent(content, langUpper);
+		codeFile.setCreatedAt(LocalDateTime.now()); // Updated to use LocalDateTime
 
-	    if (normalizedContent.isEmpty()) {
+		Map<String, Integer> trigrams = generateTrigrams(normalizedContent, langUpper);
 
-	        throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
+		if (trigrams.isEmpty()) {
 
-	    }
+			throw new IllegalArgumentException("No trigrams generated for file: " + fileName);
 
+		}
 
+		codeFile.Settrigram_vector(trigrams);
 
-	    CodeFile codeFile = new CodeFile();
+		logger.info("Generated trigrams for file {}: {} trigrams: {}", fileName, trigrams.size(), trigrams);
 
-	    codeFile.setFileName(fileName);
+		Set<ConstraintViolation<CodeFile>> violations = validator.validate(codeFile);
 
-	    codeFile.setContent(normalizedContent);
+		if (!violations.isEmpty()) {
 
-	    codeFile.setLanguage(langUpper);
+			throw new ConstraintViolationException(violations);
 
-	    codeFile.setCreatedAt(LocalDateTime.now()); // Updated to use LocalDateTime
+		}
 
+		logger.info("Saving file: {} with language: {}", fileName, langUpper);
 
+		CodeFile savedFile = codeFileRepository.save(codeFile);
 
-	    Map<String, Integer> trigrams = generateTrigrams(normalizedContent, langUpper);
+		logger.info("Saved file ID {} with trigram vector: {}", savedFile.getId(), savedFile.Gettrigram_vector());
 
-	    if (trigrams.isEmpty()) {
-
-	        throw new IllegalArgumentException("No trigrams generated for file: " + fileName);
-
-	    }
-
-	    codeFile.Settrigram_vector(trigrams);
-
-	    logger.info("Generated trigrams for file {}: {} trigrams: {}", fileName, trigrams.size(), trigrams);
-
-
-
-	    Set<ConstraintViolation<CodeFile>> violations = validator.validate(codeFile);
-
-	    if (!violations.isEmpty()) {
-
-	        throw new ConstraintViolationException(violations);
-
-	    }
-
-
-
-	    logger.info("Saving file: {} with language: {}", fileName, langUpper);
-
-	    CodeFile savedFile = codeFileRepository.save(codeFile);
-
-	    logger.info("Saved file ID {} with trigram vector: {}", savedFile.getId(), savedFile.Gettrigram_vector());
-
-	    return savedFile;
+		return savedFile;
 
 	}
-
-
 
 	public boolean isValidExtension(String fileName, String language) {
 
@@ -336,8 +292,6 @@ public class CodeFileService {
 
 	}
 
-	
-
 	@Cacheable(value = "similarity", key = "{#fileId1, #fileId2}")
 
 	public double calculateSimilarity(Long fileId1, Long fileId2) {
@@ -352,13 +306,9 @@ public class CodeFileService {
 
 				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId2));
 
-
-
 		Map<String, Integer> vector1 = getTrigramVector(file1);
 
 		Map<String, Integer> vector2 = getTrigramVector(file2);
-
-
 
 		if (vector1 == null || vector1.isEmpty()) {
 
@@ -372,8 +322,6 @@ public class CodeFileService {
 
 		}
 
-
-
 		double similarity = cosineSimilarity.cosineSimilarity(vector1, vector2) * 100;
 
 		double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
@@ -383,8 +331,6 @@ public class CodeFileService {
 		return roundedSimilarity;
 
 	}
-
-	
 
 	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
 
@@ -402,8 +348,6 @@ public class CodeFileService {
 
 				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
-
-
 		Map<String, Integer> targetVector = getTrigramVector(targetFile);
 
 		if (targetVector == null || targetVector.isEmpty()) {
@@ -411,8 +355,6 @@ public class CodeFileService {
 			throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId);
 
 		}
-
-
 
 		String normalizedLanguageFilter = languageFilter;
 
@@ -432,11 +374,7 @@ public class CodeFileService {
 
 		}
 
-
-
 		final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
-
-
 
 		Page<CodeFile> allFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
 
@@ -444,13 +382,9 @@ public class CodeFileService {
 
 				fileId);
 
-
-
 		allFiles.getContent().forEach(file -> logger.debug("Fetched file: ID {}, Name {}, Language {}", file.getId(),
 
 				file.getFileName(), file.getLanguage()));
-
-
 
 		List<SimilarityResult> results = allFiles.getContent().stream()
 
@@ -470,8 +404,6 @@ public class CodeFileService {
 
 					}
 
-
-
 					double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
 
 					double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
@@ -479,8 +411,6 @@ public class CodeFileService {
 					logger.info("Similarity between files {} and {} ({}): {}%", fileId, file.getId(),
 
 							file.getLanguage(), roundedSimilarity);
-
-
 
 					return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(),
 
@@ -496,15 +426,11 @@ public class CodeFileService {
 
 				.collect(Collectors.toList());
 
-
-
 		logger.info("Returning {} results after filtering and sorting", results.size());
 
 		return new PageImpl<>(results, pageable, allFiles.getTotalElements());
 
 	}
-
-
 
 	public Map<String, Integer> generateTrigrams(String content, String language) {
 
@@ -534,8 +460,6 @@ public class CodeFileService {
 
 	}
 
-
-
 	public String normalizeContent(String content, String language) {
 
 		if (content == null || content.trim().isEmpty()) {
@@ -545,8 +469,6 @@ public class CodeFileService {
 			return "";
 
 		}
-
-
 
 		switch (language.toUpperCase()) {
 
@@ -586,11 +508,7 @@ public class CodeFileService {
 
 		}
 
-
-
 		content = content.replaceAll("\\s+", " ").toLowerCase();
-
-
 
 		content = content.replaceAll("[{}();\\[\\]]", " ").replaceAll(
 
@@ -601,8 +519,6 @@ public class CodeFileService {
 				.replaceAll("[+\\-*/%><!&|]", " ")
 
 				.replaceAll("\\b(print|println|cout|printf|puts|put|write|log|console)\\b", " ");
-
-
 
 		content = content.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
 
@@ -618,8 +534,6 @@ public class CodeFileService {
 
 	}
 
-
-
 	public void deleteAllFiles() {
 
 		logger.info("Deleting all files from the database...");
@@ -629,8 +543,6 @@ public class CodeFileService {
 		logger.info("All files deleted successfully.");
 
 	}
-
-
 
 	@Cacheable(value = "trigrams", key = "#file.id")
 
@@ -660,114 +572,95 @@ public class CodeFileService {
 
 	}
 
-
-	
-
 	public List<CodeFile> uploadBatchFiles(List<MultipartFile> files, String language) throws IOException {
 
-        if (files == null || files.isEmpty()) {
+		if (files == null || files.isEmpty()) {
 
-            throw new IllegalArgumentException("No files provided for batch upload");
+			throw new IllegalArgumentException("No files provided for batch upload");
 
-        }
+		}
 
-        String langUpper = language.toUpperCase();
+		String langUpper = language.toUpperCase();
 
-        List<CodeFile> codeFiles = new ArrayList<>();
+		List<CodeFile> codeFiles = new ArrayList<>();
 
+		for (MultipartFile file : files) {
 
+			validateFile(file, langUpper); // Your existing validation method
 
-        for (MultipartFile file : files) {
+			try (InputStream inputStream = file.getInputStream()) {
 
-            validateFile(file, langUpper); // Your existing validation method
+				CodeFile codeFile = processFileStream(inputStream, file.getOriginalFilename(), langUpper);
 
-            try (InputStream inputStream = file.getInputStream()) {
+				codeFiles.add(codeFile);
 
-                CodeFile codeFile = processFileStream(inputStream, file.getOriginalFilename(), langUpper);
+			} catch (IOException e) {
 
-                codeFiles.add(codeFile);
+				logger.error("Failed to process file {}: {}", file.getOriginalFilename(), e.getMessage());
 
-            } catch (IOException e) {
+				throw e; // Or handle individually based on your needs
 
-                logger.error("Failed to process file {}: {}", file.getOriginalFilename(), e.getMessage());
+			}
 
-                throw e; // Or handle individually based on your needs
+		}
 
-            }
+		List<CodeFile> savedFiles = codeFileRepository.saveAll(codeFiles);
 
-        }
+		savedFiles.forEach(this::getTrigramVector); // Assuming this updates trigram_vector
 
-        List<CodeFile> savedFiles = codeFileRepository.saveAll(codeFiles);
-
-        savedFiles.forEach(this::getTrigramVector); // Assuming this updates trigram_vector
-
-        return savedFiles;
+		return savedFiles;
 
 	}
 
-	
-
-	
-
 	private CodeFile processFileStream(InputStream inputStream, String fileName, String language) throws IOException {
 
-        long fileSize = inputStream.available();
+		long fileSize = inputStream.available();
 
-        if (fileSize > 10 * 1024 * 1024) {
+		if (fileSize > 10 * 1024 * 1024) {
 
-            throw new IllegalArgumentException("File size exceeds 10MB limit for file: " + fileName);
+			throw new IllegalArgumentException("File size exceeds 10MB limit for file: " + fileName);
 
-        }
+		}
 
+		StringBuilder contentBuilder = new StringBuilder();
 
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
 
-        StringBuilder contentBuilder = new StringBuilder();
+			char[] buffer = new char[8192]; // 8KB buffer
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+			int bytesRead;
 
-            char[] buffer = new char[8192]; // 8KB buffer
+			while ((bytesRead = reader.read(buffer)) != -1) {
 
-            int bytesRead;
+				contentBuilder.append(buffer, 0, bytesRead);
 
-            while ((bytesRead = reader.read(buffer)) != -1) {
+			}
 
-                contentBuilder.append(buffer, 0, bytesRead);
+		}
 
-            }
+		String content = contentBuilder.toString();
 
-        }
+		String normalizedContent = normalizeContent(content, language);
 
+		if (normalizedContent.isEmpty()) {
 
+			throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
 
-        String content = contentBuilder.toString();
+		}
 
-        String normalizedContent = normalizeContent(content, language);
+		CodeFile codeFile = new CodeFile();
 
-        if (normalizedContent.isEmpty()) {
+		codeFile.setFileName(fileName);
 
-            throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
+		codeFile.setContent(normalizedContent);
 
-        }
+		codeFile.setLanguage(language);
 
+		codeFile.setCreatedAt(LocalDateTime.now());
 
+		return codeFile; // Trigram generation moved to post-save via getTrigramVector
 
-        CodeFile codeFile = new CodeFile();
-
-        codeFile.setFileName(fileName);
-
-        codeFile.setContent(normalizedContent);
-
-        codeFile.setLanguage(language);
-
-        codeFile.setCreatedAt(LocalDateTime.now());
-
-
-
-        return codeFile; // Trigram generation moved to post-save via getTrigramVector
-
-    }
-
-
+	}
 
 	@Transactional(readOnly = true)
 
@@ -807,8 +700,6 @@ public class CodeFileService {
 
 		}
 
-
-
 		String normalizedLanguageFilter = languageFilter != null ? languageFilter.toUpperCase() : null;
 
 		if (normalizedLanguageFilter != null && !SUPPORTED_LANGUAGES.containsKey(normalizedLanguageFilter)) {
@@ -819,8 +710,6 @@ public class CodeFileService {
 
 		double effectiveMinSimilarity = minSimilarity != null ? minSimilarity : 0.0;
 
-
-
 		List<CodeFile> filesToCompare = codeFileRepository.findAllById(fileIds).stream()
 
 				.filter(file -> !file.getId().equals(targetFileId))
@@ -828,8 +717,6 @@ public class CodeFileService {
 				.filter(file -> normalizedLanguageFilter == null || file.getLanguage().equals(normalizedLanguageFilter))
 
 				.collect(Collectors.toList());
-
-
 
 		return filesToCompare.stream().map(file -> {
 
@@ -872,8 +759,6 @@ public class CodeFileService {
 				.collect(Collectors.toList());
 
 	}
-
-
 
 	private void validateFile(MultipartFile file, String language) {
 
