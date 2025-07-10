@@ -2,16 +2,16 @@ package com.example.PlagiarismChecker.Service;
 
 import java.io.Serializable;
 
-public class SimilarityResult implements Serializable{
+public class SimilarityResult implements Serializable {
     private Long fileId;
     private String fileName;
-    private String Language;
+    private String language;
     private double similarity;
 
-    public SimilarityResult(Long fileId, String fileName, String Language,double similarity) {
+    public SimilarityResult(Long fileId, String fileName, String language, double similarity) {
         this.fileId = fileId;
         this.fileName = fileName;
-        this.Language=Language;
+        this.language = language;
         this.similarity = similarity;
     }
 
@@ -19,31 +19,31 @@ public class SimilarityResult implements Serializable{
         return fileId;
     }
 
+    public void setFileId(Long fileId) {
+        this.fileId = fileId;
+    }
+
     public String getFileName() {
         return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
     }
 
     public double getSimilarity() {
         return similarity;
     }
-    
-    public String getLanguage() {
-    	return Language;
-    }
-    
-    public void setLanguage(String Language) {
-    	this.Language=Language;
-    }
-   
-    public void setfileId(Long fileId) {
-    	this.fileId=fileId;
-    }
-    
-    public void setfileName(String fileName) {
-    	this.fileName=fileName;
-    }
-    
+
     public void setSimilarity(double similarity) {
-    	this.similarity=similarity;
+        this.similarity = similarity;
     }
 }

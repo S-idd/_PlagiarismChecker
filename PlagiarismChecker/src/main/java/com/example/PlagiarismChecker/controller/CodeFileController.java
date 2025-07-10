@@ -28,6 +28,7 @@ import com.example.PlagiarismChecker.model.CodeFile;
 
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.PositiveOrZero;
+import com.example.PlagiarismChecker.DTO.BatchCompareRequest;
 
 @RestController
 @RequestMapping("/api/code-files")
@@ -38,6 +39,8 @@ public class CodeFileController implements Serializable{
 	
 	@Autowired
 	private CodeFileRepository codeFileRepository;
+	
+	
 	
 	@Autowired
     private MessageProducer producer;
@@ -134,52 +137,16 @@ public class CodeFileController implements Serializable{
 	}
 
 
-	@PostMapping("/compare/batch")
-	public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
-		List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
-				request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
-		return ResponseEntity.ok(results);
-	}
+//	@PostMapping("/compare/batch")
+//	public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
+//		List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
+//				request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
+//		
+//		return ResponseEntity.ok(results);
+//	}
 	
 
 	// DTO for batch comparison request
-	public static class BatchCompareRequest {
-		private Long targetFileId;
-		private List<Long> fileIds;
-		private String languageFilter;
-		private Double minSimilarity;
-
-		public Long getTargetFileId() {
-			return targetFileId;
-		}
-
-		public void setTargetFileId(Long targetFileId) {
-			this.targetFileId = targetFileId;
-		}
-
-		public List<Long> getFileIds() {
-			return fileIds;
-		}
-
-		public void setFileIds(List<Long> fileIds) {
-			this.fileIds = fileIds;
-		}
-
-		public String getLanguageFilter() {
-			return languageFilter;
-		}
-
-		public void setLanguageFilter(String languageFilter) {
-			this.languageFilter = languageFilter;
-		}
-
-		public Double getMinSimilarity() {
-			return minSimilarity;
-		}
-
-		public void setMinSimilarity(Double minSimilarity) {
-			this.minSimilarity = minSimilarity;
-		}
-	}
+	
 }
 
