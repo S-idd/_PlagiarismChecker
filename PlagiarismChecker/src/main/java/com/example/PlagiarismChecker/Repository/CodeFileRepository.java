@@ -18,6 +18,10 @@ public interface CodeFileRepository extends JpaRepository<CodeFile, Long> {
     @Query("SELECT c FROM CodeFile c WHERE (:language IS NULL OR c.language = :language)")
     Page<CodeFile> findByLanguage(@Param("language") String language, Pageable pageable);
     
+    @Query("SELECT c FROM CodeFile c WHERE (:language IS NULL OR c.language = :language)")
+    List<CodeFile> findByLanguageUnpaged(@Param("language") String language);
+
+    
     @Query("SELECT COUNT(c) FROM CodeFile c WHERE (:language IS NULL OR c.language = :language) AND c.id != :fileId")
     long countByLanguageExcludingFileId(@Param("language") String language, @Param("fileId") Long fileId);
     
