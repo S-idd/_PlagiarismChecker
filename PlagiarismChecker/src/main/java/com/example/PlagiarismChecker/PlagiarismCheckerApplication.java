@@ -6,10 +6,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 
-//import com.fasterxml.jackson.core.JacksonException;
-//import com.fasterxml.jackson.core.JsonFactory;
 
-import jakarta.annotation.PostConstruct;
 
 @SpringBootApplication
 @EntityScan("com.example.PlagiarismChecker.model")
@@ -21,10 +18,16 @@ public class PlagiarismCheckerApplication {
 		SpringApplication.run(PlagiarismCheckerApplication.class, args);
 	}
 	
-	@PostConstruct
-    public void logJacksonVersion() {
-//        System.out.println("Jackson Core Version: " + JsonFactory.class.getPackage().getImplementationVersion());
-//        System.out.println("Jackson Databind Version: " + JacksonException.class.getPackage().getImplementationVersion());
-    }
+	
 }
+//import com.fasterxml.jackson.core.JacksonException;
+//import com.fasterxml.jackson.core.JsonFactory;
+
+//import jakarta.annotation.PostConstruct;
+
+//@PostConstruct
+//public void logJacksonVersion() {
+////    System.out.println("Jackson Core Version: " + JsonFactory.class.getPackage().getImplementationVersion());
+////    System.out.println("Jackson Databind Version: " + JacksonException.class.getPackage().getImplementationVersion());
+//}
 	

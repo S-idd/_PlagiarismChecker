@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +28,7 @@ import com.example.PlagiarismChecker.model.CodeFile;
 
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.PositiveOrZero;
-import com.example.PlagiarismChecker.DTO.BatchCompareRequest;
+
 
 @RestController
 @RequestMapping("/api/code-files")
@@ -83,34 +83,15 @@ public class CodeFileController implements Serializable{
 		return ResponseEntity.ok(results);
 	}
 
-//	@GetMapping("/files")
-//	public ResponseEntity<List<CodeFile>> getAllFiles() {
-//		List<CodeFile> files = codeFileService.GetAllFiles();
-//		return ResponseEntity.ok(files);
-//	}
 	  @GetMapping("/files")
 	    public ResponseEntity<Page<CodeFileSummary>> getAllFiles(Pageable pageable) {
-//	        Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
-//	        return ResponseEntity.ok(files);
 		  return ResponseEntity.ok(codeFileRepository.findAllBy(pageable));
 	    }
+	  
+//      Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
+//      return ResponseEntity.ok(files);
 
-//	@PostMapping("/upload/batch")
-//    public ResponseEntity<String> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
-//            @RequestParam String language) throws IOException {
-//        // Validate input
-//        if (files == null || files.isEmpty()) {
-//            return ResponseEntity.badRequest().body("No files provided for batch upload");
-//        }
-//
-//        // Queue each file for asynchronous processing
-//        for (MultipartFile file : files) {
-//            producer.sendUploadMessage(file, language);
-//        }
-//        
-//
-//        return ResponseEntity.ok("Batch upload queued successfully");
-//    }
+
 	@PostMapping("/upload/batch")
 	public ResponseEntity<?> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
 	                                               @RequestParam String language) throws IOException {
@@ -137,16 +118,54 @@ public class CodeFileController implements Serializable{
 	}
 
 
-//	@PostMapping("/compare/batch")
-//	public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
-//		List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
-//				request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
-//		
-//		return ResponseEntity.ok(results);
-//	}
-	
-
-	// DTO for batch comparison request
 	
 }
+
+
+
+
+//@GetMapping("/files")
+//public ResponseEntity<List<CodeFile>> getAllFiles() {
+//	List<CodeFile> files = codeFileService.GetAllFiles();
+//	return ResponseEntity.ok(files);
+//}
+
+
+//@PostMapping("/upload/batch")
+//public ResponseEntity<String> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
+//      @RequestParam String language) throws IOException {
+//  // Validate input
+//  if (files == null || files.isEmpty()) {
+//      return ResponseEntity.badRequest().body("No files provided for batch upload");
+//  }
+//
+//  // Queue each file for asynchronous processing
+//  for (MultipartFile file : files) {
+//      producer.sendUploadMessage(file, language);
+//  }
+//  
+//
+//  return ResponseEntity.ok("Batch upload queued successfully");
+//}
+
+
+//@GetMapping("/files")
+//public ResponseEntity<Page<CodeFileSummary>> getAllFiles(Pageable pageable) {
+//    Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
+//    return ResponseEntity.ok(files);
+////  return ResponseEntity.ok(codeFileRepository.findAllBy(pageable));
+//}
+
+//@PostMapping("/compare/batch")
+//public ResponseEntity<List<SimilarityResult>> compareBatchFiles(@RequestBody BatchCompareRequest request) {
+//	List<SimilarityResult> results = codeFileService.compareBatchFiles(request.getTargetFileId(),
+//			request.getFileIds(), request.getLanguageFilter(), request.getMinSimilarity());
+//	
+//	return ResponseEntity.ok(results);
+//}
+
+
+//import org.springframework.web.bind.annotation.RequestBody;
+//import com.example.PlagiarismChecker.DTO.BatchCompareRequest;
+// DTO for batch comparison request
 

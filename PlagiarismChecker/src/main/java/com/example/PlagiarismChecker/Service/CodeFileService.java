@@ -88,17 +88,7 @@ public class CodeFileService {
 
 	private Validator validator;
 
-//	@Cacheable(value = "all-files", key = "'all'")
-//
-//	public List<CodeFile> GetAllFiles() {
-//
-//		return codeFileRepository.findAll();
-//
-//	}
 
-//	public Page<CodeFile> GetAllFiles(Pageable pageable) {
-//		return codeFileRepository.findAll(pageable);
-//	}
 	
 	@Cacheable(value = "all-files", key = "'all'")
 	public Page<CodeFileSummary> GetAllFilesASAP(Pageable pageable) {
@@ -332,105 +322,7 @@ public class CodeFileService {
 
 	}
 
-//	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
-//
-//	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter,
-//
-//			Double minSimilarity) {
-//
-//		logger.info(
-//
-//				"Comparing file ID {} against all other files with pagination, languageFilter: {}, minSimilarity: {}",
-//
-//				fileId, languageFilter, minSimilarity);
-//
-//		CodeFile targetFile = codeFileRepository.findById(fileId)
-//
-//				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
-//
-//		Map<String, Integer> targetVector = getTrigramVector(targetFile);
-//
-//		if (targetVector == null || targetVector.isEmpty()) {
-//
-//			throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId);
-//
-//		}
-//
-//		String normalizedLanguageFilter = languageFilter;
-//
-//		if (languageFilter != null && !languageFilter.isEmpty()) {
-//
-//			String langUpper = languageFilter.toUpperCase();
-//
-//			if (!SUPPORTED_LANGUAGES.containsKey(langUpper)) {
-//
-//				throw new IllegalArgumentException("Unsupported language: " + languageFilter + ". Supported languages: "
-//
-//						+ SUPPORTED_LANGUAGES.keySet());
-//
-//			}
-//
-//			normalizedLanguageFilter = langUpper;
-//
-//		}
-//
-//		final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
-//
-//		Page<CodeFile> allFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
-//
-//		logger.info("Fetched {} files from database for comparison with file ID: {}", allFiles.getTotalElements(),
-//
-//				fileId);
-//
-//		allFiles.getContent().forEach(file -> logger.debug("Fetched file: ID {}, Name {}, Language {}", file.getId(),
-//
-//				file.getFileName(), file.getLanguage()));
-//
-//		List<SimilarityResult> results = allFiles.getContent().stream()
-//
-//				.peek(file -> logger.debug("Processing file: ID {}, Name {}, Language {}", file.getId(),
-//
-//						file.getFileName(), file.getLanguage()))
-//
-//				.filter(file -> !Objects.equals(file.getId(), fileId)).map(file -> {
-//
-//					Map<String, Integer> otherVector = getTrigramVector(file);
-//
-//					if (otherVector == null || otherVector.isEmpty()) {
-//
-//						logger.error("Trigram vector not found or empty for file ID: {}", file.getId());
-//
-//						throw new IllegalStateException("Trigram vector missing or empty for file ID: " + file.getId());
-//
-//					}
-//
-//					double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
-//
-//					double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
-//
-//					logger.info("Similarity between files {} and {} ({}): {}%", fileId, file.getId(),
-//
-//							file.getLanguage(), roundedSimilarity);
-//
-//					return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(),
-//
-//							roundedSimilarity);
-//
-//				}).filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
-//
-//				.peek(result -> logger.debug("Result: File ID {}, Language {}, Similarity {}", result.getFileId(),
-//
-//						result.getLanguage(), result.getSimilarity()))
-//
-//				.sorted((r1, r2) -> Double.compare(r2.getSimilarity(), r1.getSimilarity()))
-//
-//				.collect(Collectors.toList());
-//
-//		logger.info("Returning {} results after filtering and sorting", results.size());
-//
-//		return new PageImpl<>(results, pageable, allFiles.getTotalElements());
-//
-//	}
+
 	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
 	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter, Double minSimilarity) {
 
@@ -830,3 +722,121 @@ public class CodeFileService {
 	}
 
 }
+
+
+
+
+//@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
+//
+//public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter,
+//
+//		Double minSimilarity) {
+//
+//	logger.info(
+//
+//			"Comparing file ID {} against all other files with pagination, languageFilter: {}, minSimilarity: {}",
+//
+//			fileId, languageFilter, minSimilarity);
+//
+//	CodeFile targetFile = codeFileRepository.findById(fileId)
+//
+//			.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
+//
+//	Map<String, Integer> targetVector = getTrigramVector(targetFile);
+//
+//	if (targetVector == null || targetVector.isEmpty()) {
+//
+//		throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId);
+//
+//	}
+//
+//	String normalizedLanguageFilter = languageFilter;
+//
+//	if (languageFilter != null && !languageFilter.isEmpty()) {
+//
+//		String langUpper = languageFilter.toUpperCase();
+//
+//		if (!SUPPORTED_LANGUAGES.containsKey(langUpper)) {
+//
+//			throw new IllegalArgumentException("Unsupported language: " + languageFilter + ". Supported languages: "
+//
+//					+ SUPPORTED_LANGUAGES.keySet());
+//
+//		}
+//
+//		normalizedLanguageFilter = langUpper;
+//
+//	}
+//
+//	final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
+//
+//	Page<CodeFile> allFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
+//
+//	logger.info("Fetched {} files from database for comparison with file ID: {}", allFiles.getTotalElements(),
+//
+//			fileId);
+//
+//	allFiles.getContent().forEach(file -> logger.debug("Fetched file: ID {}, Name {}, Language {}", file.getId(),
+//
+//			file.getFileName(), file.getLanguage()));
+//
+//	List<SimilarityResult> results = allFiles.getContent().stream()
+//
+//			.peek(file -> logger.debug("Processing file: ID {}, Name {}, Language {}", file.getId(),
+//
+//					file.getFileName(), file.getLanguage()))
+//
+//			.filter(file -> !Objects.equals(file.getId(), fileId)).map(file -> {
+//
+//				Map<String, Integer> otherVector = getTrigramVector(file);
+//
+//				if (otherVector == null || otherVector.isEmpty()) {
+//
+//					logger.error("Trigram vector not found or empty for file ID: {}", file.getId());
+//
+//					throw new IllegalStateException("Trigram vector missing or empty for file ID: " + file.getId());
+//
+//				}
+//
+//				double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
+//
+//				double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
+//
+//				logger.info("Similarity between files {} and {} ({}): {}%", fileId, file.getId(),
+//
+//						file.getLanguage(), roundedSimilarity);
+//
+//				return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(),
+//
+//						roundedSimilarity);
+//
+//			}).filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
+//
+//			.peek(result -> logger.debug("Result: File ID {}, Language {}, Similarity {}", result.getFileId(),
+//
+//					result.getLanguage(), result.getSimilarity()))
+//
+//			.sorted((r1, r2) -> Double.compare(r2.getSimilarity(), r1.getSimilarity()))
+//
+//			.collect(Collectors.toList());
+//
+//	logger.info("Returning {} results after filtering and sorting", results.size());
+//
+//	return new PageImpl<>(results, pageable, allFiles.getTotalElements());
+//
+//}
+
+
+
+
+//@Cacheable(value = "all-files", key = "'all'")
+//
+//public List<CodeFile> GetAllFiles() {
+//
+//	return codeFileRepository.findAll();
+//
+//}
+
+//public Page<CodeFile> GetAllFiles(Pageable pageable) {
+//	return codeFileRepository.findAll(pageable);
+//}

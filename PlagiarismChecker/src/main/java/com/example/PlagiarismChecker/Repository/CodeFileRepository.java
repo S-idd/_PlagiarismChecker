@@ -29,12 +29,14 @@ public interface CodeFileRepository extends JpaRepository<CodeFile, Long> {
     
     @Query("SELECT c FROM CodeFile c WHERE c.content LIKE %:keyword%")
     List<CodeFile> findByContentContaining(@Param("keyword") String keyword);
-    
-//    @Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")
-//    @Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")
+
     @Query("SELECT c.id AS id, c.fileName AS fileName, c.language AS language FROM CodeFile c")
     Page<CodeFileSummary> findAllBy(Pageable pageable);
 
 
 
 }
+
+
+//@Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")
+//@Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")
