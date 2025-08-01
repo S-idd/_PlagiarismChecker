@@ -1,4 +1,5 @@
 package com.example.PlagiarismChecker.Repository;
+import com.example.PlagiarismChecker.DTO.CodeFileSummary;
 import com.example.PlagiarismChecker.model.CodeFile;
 
 import java.util.List;
@@ -17,8 +18,25 @@ public interface CodeFileRepository extends JpaRepository<CodeFile, Long> {
     @Query("SELECT c FROM CodeFile c WHERE (:language IS NULL OR c.language = :language)")
     Page<CodeFile> findByLanguage(@Param("language") String language, Pageable pageable);
     
+    @Query("SELECT c FROM CodeFile c WHERE (:language IS NULL OR c.language = :language)")
+    List<CodeFile> findByLanguageUnpaged(@Param("language") String language);
+
+    
     @Query("SELECT COUNT(c) FROM CodeFile c WHERE (:language IS NULL OR c.language = :language) AND c.id != :fileId")
     long countByLanguageExcludingFileId(@Param("language") String language, @Param("fileId") Long fileId);
     
     List<CodeFile> findAllByIdInAndLanguage(List<Long> ids, String language);
+    
+    @Query("SELECT c FROM CodeFile c WHERE c.content LIKE %:keyword%")
+    List<CodeFile> findByContentContaining(@Param("keyword") String keyword);
+
+    @Query("SELECT c.id AS id, c.fileName AS fileName, c.language AS language FROM CodeFile c")
+    Page<CodeFileSummary> findAllBy(Pageable pageable);
+
+
+
 }
+
+
+//@Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")
+//@Query("SELECT new com.example.PlagiarismChecker.DTO.CodeFileSummary(c.id, c.fileName, c.language) FROM CodeFile c")

@@ -7,16 +7,14 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-
-
-
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Map;
 
 @Entity
 @Table(name = "code_files")
-public class CodeFile {
-
+public class CodeFile implements Serializable {
+    private static final long serialVersionUID = 1L;
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
