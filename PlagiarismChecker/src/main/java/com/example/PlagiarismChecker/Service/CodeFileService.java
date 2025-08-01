@@ -88,13 +88,10 @@ public class CodeFileService {
 
 	private Validator validator;
 
-
-	
 	@Cacheable(value = "all-files", key = "'all'")
 	public Page<CodeFileSummary> GetAllFilesASAP(Pageable pageable) {
-	    return codeFileRepository.findAllBy(pageable);
+		return codeFileRepository.findAllBy(pageable);
 	}
-
 
 	private static final Map<String, String[]> SUPPORTED_LANGUAGES = new HashMap<>();
 
@@ -322,56 +319,52 @@ public class CodeFileService {
 
 	}
 
-
 	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
-	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter, Double minSimilarity) {
+	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter,
+			Double minSimilarity) {
 
-	    logger.info("Comparing file ID {} against paged files, page: {}, size: {}, languageFilter: {}, minSimilarity: {}",
-	                fileId, pageable.getPageNumber(), pageable.getPageSize(), languageFilter, minSimilarity);
+		logger.info(
+				"Comparing file ID {} against paged files, page: {}, size: {}, languageFilter: {}, minSimilarity: {}",
+				fileId, pageable.getPageNumber(), pageable.getPageSize(), languageFilter, minSimilarity);
 
-	    // Fetch target file and its trigram vector
-	    CodeFile targetFile = codeFileRepository.findById(fileId)
-	            .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
+		// Fetch target file and its trigram vector
+		CodeFile targetFile = codeFileRepository.findById(fileId)
+				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
-	    Map<String, Integer> targetVector = getTrigramVector(targetFile);
-	    if (targetVector == null || targetVector.isEmpty()) {
-	        throw new IllegalStateException("Trigram vector missing or empty for file ID: " + fileId);
-	    }
+		Map<String, Integer> targetVector = getTrigramVector(targetFile);
+		if (targetVector == null || targetVector.isEmpty()) {
+			throw new IllegalStateException("Trigram vector missing or empty for file ID: " + fileId);
+		}
 
-	    // Normalize language filter
-	    String normalizedLanguageFilter = (languageFilter != null && !languageFilter.isEmpty())
-	            ? languageFilter.toUpperCase()
-	            : null;
+		// Normalize language filter
+		String normalizedLanguageFilter = (languageFilter != null && !languageFilter.isEmpty())
+				? languageFilter.toUpperCase()
+				: null;
 
-	    final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
+		final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
 
-	    // Fetch paged files (only one page of results)
-	    Page<CodeFile> pageOfFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
+		// Fetch paged files (only one page of results)
+		Page<CodeFile> pageOfFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
 
-	    List<SimilarityResult> results = pageOfFiles.getContent()
-	            .stream()
-	            .filter(file -> !Objects.equals(file.getId(), fileId))
-	            .parallel()
-	            .map(file -> {
-	                Map<String, Integer> otherVector = getTrigramVector(file);
-	                if (otherVector == null || otherVector.isEmpty()) return null;
+		List<SimilarityResult> results = pageOfFiles.getContent().stream()
+				.filter(file -> !Objects.equals(file.getId(), fileId)).parallel().map(file -> {
+					Map<String, Integer> otherVector = getTrigramVector(file);
+					if (otherVector == null || otherVector.isEmpty())
+						return null;
 
-	                double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
-	                double rounded = Math.round(similarity * 100.0) / 100.0;
+					double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
+					double rounded = Math.round(similarity * 100.0) / 100.0;
 
-	                return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), rounded);
-	            })
-	            .filter(Objects::nonNull)
-	            .filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
-	            .sorted(Comparator.comparingDouble(SimilarityResult::getSimilarity).reversed())
-	            .collect(Collectors.toList());
+					return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), rounded);
+				}).filter(Objects::nonNull).filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
+				.sorted(Comparator.comparingDouble(SimilarityResult::getSimilarity).reversed())
+				.collect(Collectors.toList());
 
-	    logger.info("Returning {} results for page {} with pageSize {}", results.size(), pageable.getPageNumber(), pageable.getPageSize());
+		logger.info("Returning {} results for page {} with pageSize {}", results.size(), pageable.getPageNumber(),
+				pageable.getPageSize());
 
-	    return new PageImpl<>(results, pageable, pageOfFiles.getTotalElements());
+		return new PageImpl<>(results, pageable, pageOfFiles.getTotalElements());
 	}
-
-
 
 	public Map<String, Integer> generateTrigrams(String content, String language) {
 
@@ -723,9 +716,6 @@ public class CodeFileService {
 
 }
 
-
-
-
 //@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
 //
 //public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter,
@@ -825,9 +815,6 @@ public class CodeFileService {
 //	return new PageImpl<>(results, pageable, allFiles.getTotalElements());
 //
 //}
-
-
-
 
 //@Cacheable(value = "all-files", key = "'all'")
 //
