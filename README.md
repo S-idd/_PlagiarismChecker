@@ -1,6 +1,6 @@
 # PlagiarismChecker
 
-A Spring Boot-based plagiarism detection tool that analyzes code similarity using advanced algorithms including cosine similarity and trigram analysis.
+PlagiarismChecker is an advanced plagiarism detection tool for source code, built with Spring Boot. It analyzes code similarity with robust algorithms, including cosine similarity and trigram analysis, and supports multi-language file comparison for educational and professional use.
 
 ## Features
 
@@ -17,7 +17,7 @@ A Spring Boot-based plagiarism detection tool that analyzes code similarity usin
 ## Technology Stack
 
 - **Backend**: Spring Boot 3.3.5
-- **Java Version**: 17
+- **Java Version**: 24
 - **Database**: JPA/Hibernate with configurable database support
 - **Build Tool**: Maven
 - **Testing**: JUnit 5, Mockito, AssertJ
@@ -28,7 +28,7 @@ A Spring Boot-based plagiarism detection tool that analyzes code similarity usin
 
 - Java 17 or higher
 - Maven 3.6+
-- Database (H2 for development, configurable for production)
+- Database (H2 for development by default, configurable for PostgreSQL and other relational databases)
 
 ## Installation & Setup
 
@@ -190,7 +190,31 @@ Run the test suite:
 
 ## Development
 
-### Project Structure
+### Folder Structure
+
+```
+PlagiarismChecker/
+├── .gitattributes
+├── .gitignore
+├── bin/
+│   ├── .gitattributes
+│   ├── .gitignore
+│   ├── mvnw
+│   ├── mvnw.cmd
+│   └── pom.xml
+├── cls
+├── logs/
+│   ├── application.log
+│   ├── application.log.2025-06-07.0.gz
+│   ├── application.log.2025-06-08.0.gz
+│   ├── application.log.2025-06-11.0.gz
+│   └── application.log.2025-06-12.0.gz
+├── mvnw
+├── mvnw.cmd
+└── pom.xml
+```
+
+### Project Structure (Java Source)
 
 ```
 src/
