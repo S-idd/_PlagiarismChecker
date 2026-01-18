@@ -20,14 +20,5 @@ public class PlagiarismCheckerApplication {
 	
 	
 }
-//import com.fasterxml.jackson.core.JacksonException;
-//import com.fasterxml.jackson.core.JsonFactory;
 
-//import jakarta.annotation.PostConstruct;
-
-//@PostConstruct
-//public void logJacksonVersion() {
-////    System.out.println("Jackson Core Version: " + JsonFactory.class.getPackage().getImplementationVersion());
-////    System.out.println("Jackson Databind Version: " + JacksonException.class.getPackage().getImplementationVersion());
-//}
 	
