@@ -2,8 +2,6 @@ package com.example.PlagiarismChecker.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import org.hibernate.annotations.CreationTimestamp;
-
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -12,80 +10,136 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 @Entity
-@Table(name = "code_files")
+@Table(name = "code_files", 
+    indexes = {
+        @Index(name = "idx_language", columnList = "language"),
+        @Index(name = "idx_created_at", columnList = "created_at"),
+        @Index(name = "idx_content_hash", columnList = "content_hash"),
+        @Index(name = "idx_language_created", columnList = "language,created_at")
+    }
+)
 public class CodeFile implements Serializable {
     private static final long serialVersionUID = 1L;
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
 
-	@NotBlank(message = "File name cannot be blank")
-	@Column(nullable = false)
-	private String fileName;
+    /**
+     * CRITICAL: Changed from IDENTITY to SEQUENCE for batch insert support
+     * IDENTITY disables Hibernate batch processing
+     */
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "code_file_seq")
+    @SequenceGenerator(name = "code_file_seq", sequenceName = "code_file_sequence", allocationSize = 50)
+    private Long id;
 
-	@NotBlank(message = "Content cannot be blank")
-	@Column(columnDefinition = "TEXT", nullable = false)
-	private String content;
+    @NotBlank(message = "File name cannot be blank")
+    @Column(nullable = false, length = 500)
+    private String fileName;
 
-	@NotBlank(message = "Language cannot be blank")
-	@Column(nullable = false)
-	private String language;
+    @NotBlank(message = "Content cannot be blank")
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String content;
 
-	@CreationTimestamp
-	@Column(updatable = false)
-	private LocalDateTime createdAt;
-	
-	
-	@JdbcTypeCode(SqlTypes.JSON)
-	@Column(name = "trigram_vector", columnDefinition = "JSONB")
-	private Map<String, Integer> trigram_vector;
+    @NotBlank(message = "Language cannot be blank")
+    @Column(nullable = false, length = 50)
+    private String language;
 
-	// Getters and Setters
-	public Long getId() {
-		return id;
-	}
+    @Column(name = "created_at", updatable = false, nullable = false)
+    private LocalDateTime createdAt;
 
-	public void setId(Long id) {
-		this.id = id;
-	}
+    /**
+     * Trigram vector stored as JSONB for efficient storage
+     * Initially NULL, populated by async job after upload
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "trigram_vector", columnDefinition = "JSONB")
+    private Map<String, Integer> trigram_vector;
 
-	public String getFileName() {
-		return fileName;
-	}
+    /**
+     * Content hash for duplicate detection
+     * Not unique to allow re-uploads if needed
+     */
+    @Column(name = "content_hash", nullable = false, length = 64)
+    private String contentHash;
 
-	public void setFileName(String fileName) {
-		this.fileName = fileName;
-	}
+    /**
+     * Flag to track if trigrams have been generated
+     */
+    @Column(name = "trigrams_generated", nullable = false)
+    private boolean trigramsGenerated = false;
 
-	public String getContent() {
-		return content;
-	}
+    // Constructors
+    public CodeFile() {
+        this.createdAt = LocalDateTime.now();
+    }
 
-	public void setContent(String content) {
-		this.content = content;
-	}
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
 
-	public String getLanguage() {
-		return language;
-	}
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-	public void setLanguage(String language) {
-		this.language = language;
-	}
+    public String getFileName() {
+        return fileName;
+    }
 
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
-	}
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
 
-	public void setCreatedAt(LocalDateTime createdAt) {
-		this.createdAt = createdAt;
-	}
+    public String getContent() {
+        return content;
+    }
 
-	public Map<String, Integer> Gettrigram_vector() {
-		return trigram_vector;
-	}
-	
-	public void Settrigram_vector(Map<String, Integer> trigram_vector) {
-		this.trigram_vector=trigram_vector;
-	}
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Map<String, Integer> Gettrigram_vector() {
+        return trigram_vector;
+    }
+
+    public void Settrigram_vector(Map<String, Integer> trigram_vector) {
+        this.trigram_vector = trigram_vector;
+    }
+
+    public String getContentHash() {
+        return contentHash;
+    }
+
+    public void setContentHash(String contentHash) {
+        this.contentHash = contentHash;
+    }
+
+    public boolean getTrigramsGenerated() {
+        return trigramsGenerated;
+    }
+
+    public void setTrigramsGenerated(boolean trigramsGenerated) {
+        this.trigramsGenerated = trigramsGenerated;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }
