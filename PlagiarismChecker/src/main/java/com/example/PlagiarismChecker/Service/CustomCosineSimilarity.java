@@ -1,7 +1,7 @@
 package com.example.PlagiarismChecker.Service;
 
-import java.util.Map;
 import org.springframework.stereotype.Component;
+import java.util.Map;
 
 @Component
 public class CustomCosineSimilarity {
@@ -15,17 +15,18 @@ public class CustomCosineSimilarity {
         double norm1 = 0.0;
         double norm2 = 0.0;
 
-        for (Map.Entry<String, Integer> entry : vector1.entrySet()) {
-            String key = entry.getKey();
-            int value1 = entry.getValue();
-            norm1 += value1 * value1;
-            Integer value2 = vector2.getOrDefault(key, 0);
-            dotProduct += value1 * value2;
+        for (Map.Entry<String, Integer> e1 : vector1.entrySet()) {
+            String key = e1.getKey();
+            int v1 = e1.getValue();
+            norm1 += (long) v1 * v1;  // prevent overflow
+            Integer v2 = vector2.get(key);
+            if (v2 != null) {
+                dotProduct += (long) v1 * v2;
+            }
         }
 
-        for (Map.Entry<String, Integer> entry : vector2.entrySet()) {
-            int value2 = entry.getValue();
-            norm2 += value2 * value2;
+        for (Integer v2 : vector2.values()) {
+            norm2 += (long) v2 * v2;
         }
 
         if (norm1 == 0.0 || norm2 == 0.0) {

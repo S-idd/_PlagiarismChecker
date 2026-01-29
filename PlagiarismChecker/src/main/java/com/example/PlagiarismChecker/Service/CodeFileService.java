@@ -15,7 +15,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import java.util.Arrays;
+
 import java.util.Comparator;
+
 import java.util.HashMap;
 
 import java.util.List;
@@ -53,7 +55,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import com.example.PlagiarismChecker.DTO.CodeFileSummary;
+
 import com.example.PlagiarismChecker.Repository.CodeFileRepository;
+
 import com.example.PlagiarismChecker.model.CodeFile;
 
 import jakarta.annotation.PostConstruct;
@@ -65,6 +69,16 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 
 import jakarta.validation.constraints.NotNull;
+
+import java.util.stream.IntStream;
+
+import java.util.function.Function;
+
+import java.security.MessageDigest;
+
+import java.security.NoSuchAlgorithmException;
+
+import java.util.HexFormat;
 
 @Service
 
@@ -87,6 +101,7 @@ public class CodeFileService {
 	@Autowired
 
 	private Validator validator;
+
 
 	@Cacheable(value = "all-files", key = "'all'")
 	public Page<CodeFileSummary> GetAllFilesASAP(Pageable pageable) {
@@ -157,102 +172,91 @@ public class CodeFileService {
 
 	}
 
+	private double roundSimilarity(double similarity) {
+
+		return BigDecimal.valueOf(similarity)
+
+				.setScale(2, RoundingMode.HALF_UP)
+
+				.doubleValue();
+	}
+
 	public CodeFile uploadFileStream(InputStream inputStream, String fileName, String language) throws IOException {
 
 		if (inputStream == null) {
-
 			throw new IllegalArgumentException("File input stream cannot be null");
-
 		}
 
 		String langUpper = language.toUpperCase();
 
 		if (fileName == null || !isValidExtension(fileName, langUpper)) {
-
 			throw new IllegalArgumentException(
-
 					"Invalid file extension for language " + language + ". Supported extensions: "
-
 							+ String.join(", ", SUPPORTED_LANGUAGES.getOrDefault(langUpper, new String[] {})));
-
 		}
 
-		// Estimate size (approximate, adjust if needed)
-
-		long fileSize = inputStream.available();
-
-		if (fileSize > 10 * 1024 * 1024) {
-
-			throw new IllegalArgumentException("File size exceeds 10MB limit");
-
-		}
-
-		// Read content in chunks
-
+		// Check size more accurately by reading
 		StringBuilder contentBuilder = new StringBuilder();
-
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-
-			char[] buffer = new char[8192]; // 8KB buffer
-
+			char[] buffer = new char[8192];
 			int bytesRead;
-
+			long totalRead = 0;
 			while ((bytesRead = reader.read(buffer)) != -1) {
-
+				totalRead += bytesRead;
+				if (totalRead > 10 * 1024 * 1024) {
+					throw new IllegalArgumentException("File size exceeds 10MB limit");
+				}
 				contentBuilder.append(buffer, 0, bytesRead);
-
 			}
-
 		}
 
 		String content = contentBuilder.toString();
-
+		
 		String normalizedContent = normalizeContent(content, langUpper);
-
-		if (normalizedContent.isEmpty()) {
-
-			throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
-
-		}
-
+		
 		CodeFile codeFile = new CodeFile();
 
-		codeFile.setFileName(fileName);
-
-		codeFile.setContent(normalizedContent);
-
-		codeFile.setLanguage(langUpper);
-
-		codeFile.setCreatedAt(LocalDateTime.now()); // Updated to use LocalDateTime
-
-		Map<String, Integer> trigrams = generateTrigrams(normalizedContent, langUpper);
-
-		if (trigrams.isEmpty()) {
-
-			throw new IllegalArgumentException("No trigrams generated for file: " + fileName);
-
+		try {
+			String contentHash = HexFormat.of().formatHex(
+					
+					MessageDigest.getInstance("SHA-256").digest(normalizedContent.getBytes(StandardCharsets.UTF_8)))
+					
+					.toLowerCase();
+			
+			codeFile.setContentHash(contentHash);
+			
+			if (codeFileRepository.existsByContentHash(contentHash)) {
+				
+				throw new IllegalArgumentException("Duplicate file detected: identical content already uploaded");
+			}
+			
+		} catch (NoSuchAlgorithmException e) {
+			
+			throw new RuntimeException("SHA-256 algorithm not available", e);
 		}
 
-		codeFile.Settrigram_vector(trigrams);
+		if (normalizedContent.isEmpty()) {
+			throw new IllegalArgumentException("File content is empty after normalization for file: " + fileName);
+		}
 
-		logger.info("Generated trigrams for file {}: {} trigrams: {}", fileName, trigrams.size(), trigrams);
+		codeFile.setFileName(fileName);
+		codeFile.setContent(normalizedContent);
+		codeFile.setLanguage(langUpper);
+		codeFile.setCreatedAt(LocalDateTime.now());
+
+		// DO NOT generate or set trigram_vector here – lazy generation in
+		// getTrigramVector()
 
 		Set<ConstraintViolation<CodeFile>> violations = validator.validate(codeFile);
-
 		if (!violations.isEmpty()) {
-
 			throw new ConstraintViolationException(violations);
-
 		}
 
 		logger.info("Saving file: {} with language: {}", fileName, langUpper);
-
 		CodeFile savedFile = codeFileRepository.save(codeFile);
 
-		logger.info("Saved file ID {} with trigram vector: {}", savedFile.getId(), savedFile.Gettrigram_vector());
-
+		logger.info("Saved file ID {}", savedFile.getId());
 		return savedFile;
-
 	}
 
 	public boolean isValidExtension(String fileName, String language) {
@@ -280,118 +284,92 @@ public class CodeFileService {
 	}
 
 	@Cacheable(value = "similarity", key = "{#fileId1, #fileId2}")
-
+	
 	public double calculateSimilarity(Long fileId1, Long fileId2) {
+		
+	    logger.info("Comparing files: {} vs. {}", fileId1, fileId2);
+	    
 
-		logger.info("Comparing files: {} vs. {}", fileId1, fileId2);
+	    CodeFile file1 = codeFileRepository.findById(fileId1)
+	    		
+	        .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId1));
+	    
+	    CodeFile file2 = codeFileRepository.findById(fileId2)
+	    		
+	        .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId2));
 
-		CodeFile file1 = codeFileRepository.findById(fileId1)
+	    Map<String, Integer> vector1 = getTrigramVector(file1);
+	    
+	    Map<String, Integer> vector2 = getTrigramVector(file2);
 
-				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId1));
+	    double similarity = cosineSimilarity.cosineSimilarity(vector1, vector2) * 100;
+	    
+	    double roundedSimilarity = roundSimilarity(similarity);  // Use your method
 
-		CodeFile file2 = codeFileRepository.findById(fileId2)
-
-				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId2));
-
-		Map<String, Integer> vector1 = getTrigramVector(file1);
-
-		Map<String, Integer> vector2 = getTrigramVector(file2);
-
-		if (vector1 == null || vector1.isEmpty()) {
-
-			throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId1);
-
-		}
-
-		if (vector2 == null || vector2.isEmpty()) {
-
-			throw new IllegalStateException("Trigram vector not found or empty for file ID: " + fileId2);
-
-		}
-
-		double similarity = cosineSimilarity.cosineSimilarity(vector1, vector2) * 100;
-
-		double roundedSimilarity = Math.round(similarity * 100.0) / 100.0;
-
-		logger.info("Similarity between files {} and {}: {}%", fileId1, fileId2, roundedSimilarity);
-
-		return roundedSimilarity;
-
+	    logger.info("Similarity between files {} and {}: {}%", fileId1, fileId2, roundedSimilarity);
+	    
+	    return roundedSimilarity;
+	    
 	}
 
-	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter, #minSimilarity}")
-	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable, String languageFilter,
-			Double minSimilarity) {
+	@Cacheable(value = "compareAll", key = "{#fileId, #pageable.pageNumber, #pageable.pageSize, #languageFilter ?: 'null', #minSimilarity ?: 'null'}")
+	
+	public Page<SimilarityResult> compareAgainstAll(Long fileId, Pageable pageable,
+			
+	                                               String languageFilter, Double minSimilarity) {
+		
+	    logger.info("Comparing file ID {} against paged files", fileId);
 
-		logger.info(
-				"Comparing file ID {} against paged files, page: {}, size: {}, languageFilter: {}, minSimilarity: {}",
-				fileId, pageable.getPageNumber(), pageable.getPageSize(), languageFilter, minSimilarity);
+	    CodeFile targetFile = codeFileRepository.findById(fileId)
+	    		
+	        .orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
 
-		// Fetch target file and its trigram vector
-		CodeFile targetFile = codeFileRepository.findById(fileId)
-				.orElseThrow(() -> new IllegalArgumentException("File not found: " + fileId));
+	    Map<String, Integer> targetVector = getTrigramVector(targetFile);
 
-		Map<String, Integer> targetVector = getTrigramVector(targetFile);
-		if (targetVector == null || targetVector.isEmpty()) {
-			throw new IllegalStateException("Trigram vector missing or empty for file ID: " + fileId);
-		}
+	    String normalizedLanguageFilter = (languageFilter != null && !languageFilter.isEmpty())
+	    		
+	        ? languageFilter.toUpperCase() : null;
 
-		// Normalize language filter
-		String normalizedLanguageFilter = (languageFilter != null && !languageFilter.isEmpty())
-				? languageFilter.toUpperCase()
-				: null;
+	    double effectiveMinSimilarity = minSimilarity != null ? minSimilarity : 0.0;
 
-		final double effectiveMinSimilarity = (minSimilarity == null) ? 0.0 : minSimilarity;
+	    Page<CodeFile> pageOfFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
 
-		// Fetch paged files (only one page of results)
-		Page<CodeFile> pageOfFiles = codeFileRepository.findByLanguage(normalizedLanguageFilter, pageable);
+	    List<SimilarityResult> results = pageOfFiles.getContent().stream()
+	    		
+	        .filter(file -> !Objects.equals(file.getId(), fileId))
+	        
+	        .map(file -> {
+	        	
+	            Map<String, Integer> otherVector = getTrigramVector(file);
+	            
+	            if (otherVector.isEmpty()) return null;
 
-		List<SimilarityResult> results = pageOfFiles.getContent().stream()
-				.filter(file -> !Objects.equals(file.getId(), fileId)).parallel().map(file -> {
-					Map<String, Integer> otherVector = getTrigramVector(file);
-					if (otherVector == null || otherVector.isEmpty())
-						return null;
+	            double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
+	            
+	            double rounded = roundSimilarity(similarity);
 
-					double similarity = cosineSimilarity.cosineSimilarity(targetVector, otherVector) * 100;
-					double rounded = Math.round(similarity * 100.0) / 100.0;
+	            return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), rounded);
+	        })
+	        .filter(Objects::nonNull)
+	        
+	        .filter(r -> r.getSimilarity() >= effectiveMinSimilarity)
+	        
+	        .sorted(Comparator.comparingDouble(SimilarityResult::getSimilarity).reversed())
+	        
+	        .collect(Collectors.toList());
 
-					return new SimilarityResult(file.getId(), file.getFileName(), file.getLanguage(), rounded);
-				}).filter(Objects::nonNull).filter(result -> result.getSimilarity() >= effectiveMinSimilarity)
-				.sorted(Comparator.comparingDouble(SimilarityResult::getSimilarity).reversed())
-				.collect(Collectors.toList());
-
-		logger.info("Returning {} results for page {} with pageSize {}", results.size(), pageable.getPageNumber(),
-				pageable.getPageSize());
-
-		return new PageImpl<>(results, pageable, pageOfFiles.getTotalElements());
+	    return new PageImpl<>(results, pageable, pageOfFiles.getTotalElements());
 	}
 
 	public Map<String, Integer> generateTrigrams(String content, String language) {
-
-		Map<String, Integer> trigrams = new HashMap<>();
-
 		if (content == null || content.length() < 3) {
-
-			logger.warn("Content too short to generate trigrams for language {}: {}", language, content);
-
-			return trigrams;
-
+			return new HashMap<>();
 		}
 
-		content = content.substring(0, Math.min(content.length(), MAX_CONTENT_LENGTH));
+		final String truncated = content.substring(0, Math.min(content.length(), MAX_CONTENT_LENGTH));
 
-		for (int i = 0; i < content.length() - 2; i++) {
-
-			String trigram = content.substring(i, i + 3);
-
-			trigrams.compute(trigram, (k, v) -> (v == null) ? 1 : v + 1);
-
-		}
-
-		logger.debug("Generated {} trigrams for language {}: {}", trigrams.size(), language, trigrams);
-
-		return trigrams;
-
+		return IntStream.range(0, truncated.length() - 2).mapToObj(i -> truncated.substring(i, i + 3))
+				.collect(Collectors.groupingBy(Function.identity(), HashMap::new, Collectors.summingInt(s -> 1)));
 	}
 
 	public String normalizeContent(String content, String language) {
@@ -478,8 +456,8 @@ public class CodeFileService {
 
 	}
 
+	@Transactional
 	@Cacheable(value = "trigrams", key = "#file.id")
-
 	public Map<String, Integer> getTrigramVector(CodeFile file) {
 
 		Map<String, Integer> trigramVector = file.Gettrigram_vector();
@@ -497,6 +475,8 @@ public class CodeFileService {
 			}
 
 			file.Settrigram_vector(trigramVector);
+			
+			file.setTrigramsGenerated(true);
 
 			codeFileRepository.save(file);
 

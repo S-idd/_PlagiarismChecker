@@ -3,7 +3,9 @@ package com.example.PlagiarismChecker.controller;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -29,34 +31,31 @@ import com.example.PlagiarismChecker.model.CodeFile;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.PositiveOrZero;
 
-
 @RestController
 @RequestMapping("/api/code-files")
-public class CodeFileController implements Serializable{
+public class CodeFileController implements Serializable {
 
 	@Autowired
 	private CodeFileService codeFileService;
-	
+
 	@Autowired
 	private CodeFileRepository codeFileRepository;
-	
-	
-	
+
 	@Autowired
-    private MessageProducer producer;
+	private MessageProducer producer;
 
 	@PostMapping("/upload")
 	public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file, @RequestParam String language) {
-	    try (InputStream inputStream = file.getInputStream()) {
-	        CodeFile savedFile = codeFileService.uploadFileStream(inputStream, file.getOriginalFilename(), language);
-	        return ResponseEntity.ok(savedFile);
-	    } catch (IOException e) {
-	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Failed to upload file: " + e.getMessage());
-	    } catch (IllegalArgumentException e) {
-	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid file type or size: " + e.getMessage());
-	    } catch (ConstraintViolationException e) {
-	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Validation error: " + e.getMessage());
-	    }
+		try (InputStream inputStream = file.getInputStream()) {
+			CodeFile savedFile = codeFileService.uploadFileStream(inputStream, file.getOriginalFilename(), language);
+			return ResponseEntity.ok(savedFile);
+		} catch (IOException e) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Failed to upload file: " + e.getMessage());
+		} catch (IllegalArgumentException e) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid file type or size: " + e.getMessage());
+		} catch (ConstraintViolationException e) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Validation error: " + e.getMessage());
+		}
 	}
 
 	@GetMapping("/compare")
@@ -83,53 +82,62 @@ public class CodeFileController implements Serializable{
 		return ResponseEntity.ok(results);
 	}
 
-	  @GetMapping("/files")
-	    public ResponseEntity<Page<CodeFileSummary>> getAllFiles(Pageable pageable) {
-		  return ResponseEntity.ok(codeFileRepository.findAllBy(pageable));
-	    }
-	  
-//      Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
-//      return ResponseEntity.ok(files);
+	@GetMapping("/files")
+	public ResponseEntity<Page<CodeFileSummary>> getAllFiles(Pageable pageable) {
+		return ResponseEntity.ok(codeFileRepository.findAllBy(pageable));
+	}
 
 
 	@PostMapping("/upload/batch")
 	public ResponseEntity<?> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
-	                                               @RequestParam String language) throws IOException {
-	    // Validate input
-	    if (files == null || files.isEmpty()) {
-	        return ResponseEntity.badRequest().body("No files provided for batch upload");
-	    }
+			@RequestParam String language) {
 
-	    for (MultipartFile file : files) {
-	        if (file.isEmpty() || file.getOriginalFilename() == null || file.getOriginalFilename().trim().isEmpty()) {
-	            return ResponseEntity.badRequest().body("One or more files are empty or have no name");
-	        }
-	        if (file.getSize() > 10 * 1024 * 1024) { // 10MB limit
-	            return ResponseEntity.badRequest().body("File " + file.getOriginalFilename() + " exceeds 10MB limit");
-	        }
-	    }
+		long startTime = System.currentTimeMillis();
 
-	    // Queue each valid file for async processing
-	    for (MultipartFile file : files) {
-	        producer.sendUploadMessage(file, language);
-	    }
+		// Fast validation
+		if (files == null || files.isEmpty()) {
+			return ResponseEntity.badRequest().body(Map.of("error", "No files provided for batch upload"));
+		}
 
-	    return ResponseEntity.ok("Batch upload queued successfully: " + files.size() + " files");
+		// Quick size check (without loading full content)
+		for (MultipartFile file : files) {
+			if (file.isEmpty() || file.getOriginalFilename() == null) {
+				return ResponseEntity.badRequest().body(Map.of("error", "One or more files are empty or have no name"));
+			}
+			if (file.getSize() > 10 * 1024 * 1024) {
+				return ResponseEntity.badRequest()
+						.body(Map.of("error", "File " + file.getOriginalFilename() + " exceeds 10MB limit"));
+			}
+		}
+
+		try {
+			// Send batch message - returns immediately with job ID
+			String jobId = producer.sendBatchUploadMessage(files, language);
+
+			long elapsed = System.currentTimeMillis() - startTime;
+
+			Map<String, Object> response = new HashMap<>();
+			response.put("jobId", jobId);
+			response.put("message", "Batch upload queued successfully");
+			response.put("totalFiles", files.size());
+			response.put("responseTime", elapsed + "ms");
+			response.put("statusEndpoint", "/api/files/upload/status/" + jobId);
+
+			return ResponseEntity.ok(response);
+
+		} catch (IOException e) {
+			return ResponseEntity.internalServerError()
+					.body(Map.of("error", "Failed to queue batch upload: " + e.getMessage()));
+		}
 	}
 
-
-	
 }
-
-
-
 
 //@GetMapping("/files")
 //public ResponseEntity<List<CodeFile>> getAllFiles() {
 //	List<CodeFile> files = codeFileService.GetAllFiles();
 //	return ResponseEntity.ok(files);
 //}
-
 
 //@PostMapping("/upload/batch")
 //public ResponseEntity<String> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
@@ -148,7 +156,6 @@ public class CodeFileController implements Serializable{
 //  return ResponseEntity.ok("Batch upload queued successfully");
 //}
 
-
 //@GetMapping("/files")
 //public ResponseEntity<Page<CodeFileSummary>> getAllFiles(Pageable pageable) {
 //    Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
@@ -164,8 +171,36 @@ public class CodeFileController implements Serializable{
 //	return ResponseEntity.ok(results);
 //}
 
-
 //import org.springframework.web.bind.annotation.RequestBody;
 //import com.example.PlagiarismChecker.DTO.BatchCompareRequest;
 // DTO for batch comparison request
 
+
+
+//Page<CodeFileSummary> files = codeFileService.GetAllFilesASAP(pageable);
+//return ResponseEntity.ok(files);
+
+//@PostMapping("/upload/batch")
+//public ResponseEntity<?> uploadBatchFilesAsync(@RequestParam("files") List<MultipartFile> files,
+//                                           @RequestParam String language) throws IOException {
+//// Validate input
+//if (files == null || files.isEmpty()) {
+//    return ResponseEntity.badRequest().body("No files provided for batch upload");
+//}
+//
+//for (MultipartFile file : files) {
+//    if (file.isEmpty() || file.getOriginalFilename() == null || file.getOriginalFilename().trim().isEmpty()) {
+//        return ResponseEntity.badRequest().body("One or more files are empty or have no name");
+//    }
+//    if (file.getSize() > 10 * 1024 * 1024) { // 10MB limit
+//        return ResponseEntity.badRequest().body("File " + file.getOriginalFilename() + " exceeds 10MB limit");
+//    }
+//}
+//
+//// Queue each valid file for async processing
+//for (MultipartFile file : files) {
+//    producer.sendUploadMessage(file, language);
+//}
+//
+//return ResponseEntity.ok("Batch upload queued successfully: " + files.size() + " files");
+//}
